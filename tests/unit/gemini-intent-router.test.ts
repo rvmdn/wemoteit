@@ -321,6 +321,45 @@ describe("Phase 9: Natural Language Intent Router & Windows Action Copilot", () 
     }
   });
 
+  it("routes 'tutup teams' to terminate_app intent and executes termination", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  functionCall: {
+                    name: "terminate_app",
+                    args: { appName: "teams" },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    }) as any;
+
+    const terminateSpy = vi.spyOn(windowsAdapter, "terminateApp").mockResolvedValue({
+      success: true,
+      message: "🛑 Berhasil menghentikan 1 proses untuk aplikasi *teams*.",
+    });
+
+    try {
+      const msg = { ...baseMsg, text: "tutup teams sekarang" };
+      await commandRouter.processIncomingMessage(msg);
+
+      expect(terminateSpy).toHaveBeenCalledWith("teams");
+      expect(deliveredMessages.some((m) => m.includes("Berhasil menghentikan 1 proses untuk aplikasi *teams*"))).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("blocks natural language requests from unauthorized senders", async () => {
     const unauthorizedMsg = {
       ...baseMsg,
@@ -344,3 +383,4 @@ describe("Phase 9: Natural Language Intent Router & Windows Action Copilot", () 
     expect(deliveredMessages[0]).toContain("wemoteit System Status");
   });
 });
+

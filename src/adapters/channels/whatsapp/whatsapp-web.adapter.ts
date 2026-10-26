@@ -239,9 +239,47 @@ export class WhatsAppWebAdapter implements InputChannelAdapter, OutputChannelAda
         }
       }
 
-      // Press Enter to send
+      // Press Enter to send text
       await this.page.keyboard.press("Enter");
       await this.page.waitForTimeout(500);
+
+      // Handle optional media attachments (e.g. desktop screenshots)
+      if (request.attachments && request.attachments.length > 0) {
+        for (const attachment of request.attachments) {
+          if (fs.existsSync(attachment.path)) {
+            try {
+              let fileInput = await this.page.$("input[type='file']");
+              if (!fileInput) {
+                const attachBtn = await this.page.$(
+                  "button[title*='Attach'], [data-icon='plus'], [data-icon='attach-menu-plus'], [data-testid='clip'], [aria-label*='Attach']"
+                );
+                if (attachBtn) {
+                  await attachBtn.click();
+                  await this.page.waitForTimeout(500);
+                  fileInput = await this.page.$("input[type='file']");
+                }
+              }
+
+              if (fileInput) {
+                await fileInput.setInputFiles(attachment.path);
+                await this.page.waitForTimeout(1000);
+                const sendBtnSelector = "[data-icon='send'], [data-testid='send'], span[data-icon='send-ref']";
+                const sendBtn = await this.page.waitForSelector(sendBtnSelector, { timeout: 10000 });
+                if (sendBtn) {
+                  await sendBtn.click();
+                  await this.page.waitForTimeout(1000);
+                } else {
+                  await this.page.keyboard.press("Enter");
+                  await this.page.waitForTimeout(1000);
+                }
+                logger.info({ file: attachment.path }, "Media attachment sent to WhatsApp chat");
+              }
+            } catch (mediaErr: any) {
+              logger.warn({ error: mediaErr.message, file: attachment.path }, "Failed to attach media to WhatsApp message");
+            }
+          }
+        }
+      }
 
       logger.info({ correlationId: request.correlationId }, "WhatsApp reply sent successfully");
 

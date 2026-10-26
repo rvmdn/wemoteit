@@ -16,8 +16,13 @@ export type ResolvedIntent =
       explanation?: string;
     }
   | {
+      type: "terminate_app";
+      appName: string;
+      explanation?: string;
+    }
+  | {
       type: "get_system_status";
-      metrics: "battery" | "ram" | "cpu" | "all";
+      metrics: "battery" | "ram" | "cpu" | "disk" | "all";
       explanation?: string;
     }
   | {
@@ -127,10 +132,11 @@ export class GeminiIntentRouter {
       "2. If user asks to run a mutating task or build a feature (e.g. 'buatkan fitur x di wedocit', 'jalankan coding di dasborin'), call 'execute_slash_command' with command: '/run <repo> <prompt>'.\n" +
       "3. If user asks to list repos, check bot status, or check jobs (e.g. 'ada repo apa aja', 'cek status bot', 'lihat pekerjaan'), call 'execute_slash_command' with '/repos', '/status', or '/jobs'.\n" +
       "4. If user asks to open or start an application (e.g. 'nyalakan teams', 'buka browser', 'buka edge', 'buka notepad', 'buka visual studio code'), call 'launch_app'.\n" +
-      "5. If user asks about battery, cpu, or ram (e.g. 'cek baterai laptop', 'sisa baterai berapa', 'cek ram'), call 'get_system_status'.\n" +
-      "6. If user asks to sleep or lock Windows (e.g. 'tidurkan laptop', 'kunci layar', 'sleep sekarang'), call 'schedule_power'.\n" +
-      "7. If user asks for screenshot (e.g. 'foto layar desktop', 'screenshot desktop'), call 'capture_screen'.\n" +
-      "8. For greetings or general questions, reply politely and conversationally in Indonesian without calling tools.";
+      "5. If user asks to close, terminate, or kill an application (e.g. 'tutup teams', 'close edge', 'kill notepad', 'matikan browser'), call 'terminate_app'.\n" +
+      "6. If user asks about battery, cpu, ram, or disk space (e.g. 'cek baterai laptop', 'sisa baterai berapa', 'cek ram', 'cek disk', 'sisa harddisk'), call 'get_system_status'.\n" +
+      "7. If user asks to sleep, lock, or keep awake Windows (e.g. 'tidurkan laptop', 'kunci layar', 'sleep sekarang', 'stay awake'), call 'schedule_power'.\n" +
+      "8. If user asks for screenshot (e.g. 'foto layar desktop', 'screenshot desktop'), call 'capture_screen'.\n" +
+      "9. For greetings or general questions, reply politely and conversationally in Indonesian without calling tools.";
 
     const tools = [
       {
@@ -176,14 +182,32 @@ export class GeminiIntentRouter {
             },
           },
           {
+            name: "terminate_app",
+            description: "Terminate, close, or kill a running desktop application on Windows (e.g. teams, edge, chrome, notepad, code, calc, spotify).",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                appName: {
+                  type: "STRING",
+                  description: "Application name to terminate",
+                },
+                explanation: {
+                  type: "STRING",
+                  description: "Short Indonesian explanation",
+                },
+              },
+              required: ["appName"],
+            },
+          },
+          {
             name: "get_system_status",
-            description: "Query Windows hardware metrics like battery percentage, RAM, CPU usage, or uptime.",
+            description: "Query Windows hardware metrics like battery percentage, RAM, CPU usage, or disk storage.",
             parameters: {
               type: "OBJECT",
               properties: {
                 metrics: {
                   type: "STRING",
-                  enum: ["battery", "ram", "cpu", "all"],
+                  enum: ["battery", "ram", "cpu", "disk", "all"],
                   description: "Metric to inspect",
                 },
                 explanation: {
@@ -305,6 +329,14 @@ export class GeminiIntentRouter {
           type: "launch_app",
           appName: String(args.appName || "").toLowerCase().trim(),
           args: args.args,
+          explanation: args.explanation,
+        };
+      }
+
+      if (fnName === "terminate_app") {
+        return {
+          type: "terminate_app",
+          appName: String(args.appName || "").toLowerCase().trim(),
           explanation: args.explanation,
         };
       }

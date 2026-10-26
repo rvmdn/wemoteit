@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { NormalizedIncomingMessage } from "../../domain/message/message.entity.js";
 import { PersistencePort } from "../../ports/persistence.port.js";
 import { CommandAuthorizer } from "../authorization/command-authorizer.js";
@@ -113,6 +114,19 @@ export class CommandRouter {
         return;
       }
 
+      if (intent.type === "terminate_app") {
+        correlationLogger.info({ app: intent.appName }, "Executing Windows terminate_app action");
+        const res = await this.windowsActionAdapter.terminateApp(intent.appName);
+        await this.deliveryService.deliverAcknowledgement(
+          message.conversationId,
+          message.workspaceId,
+          message.channelConnectionId,
+          message.correlationId,
+          res.message
+        );
+        return;
+      }
+
       if (intent.type === "get_system_status") {
         correlationLogger.info({ metrics: intent.metrics }, "Querying Windows system status");
         const status = await this.windowsActionAdapter.getSystemStatus(intent.metrics);
@@ -142,12 +156,16 @@ export class CommandRouter {
       if (intent.type === "capture_screen") {
         correlationLogger.info("Executing Windows capture_screen action");
         const res = await this.windowsActionAdapter.captureScreen();
+        const attachments = res.filePath
+          ? [{ name: path.basename(res.filePath), path: res.filePath, mimeType: "image/png" }]
+          : undefined;
         await this.deliveryService.deliverAcknowledgement(
           message.conversationId,
           message.workspaceId,
           message.channelConnectionId,
           message.correlationId,
-          res.message
+          res.message,
+          attachments
         );
         return;
       }

@@ -15,7 +15,8 @@ export class ResultDeliveryService {
     workspaceId: string,
     channelConnectionId: string,
     correlationId: string,
-    message: string
+    message: string,
+    attachments?: Array<{ name: string; path: string; mimeType: string }>
   ): Promise<void> {
     const request: OutgoingDeliveryRequest = {
       id: `ack-${Date.now()}`,
@@ -24,6 +25,7 @@ export class ResultDeliveryService {
       conversationId,
       correlationId,
       text: redactSecrets(message),
+      attachments,
     };
 
     try {

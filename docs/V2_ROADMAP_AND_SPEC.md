@@ -104,22 +104,24 @@
 ### Phase 10: Windows OS Automation Provider
 *Tujuan: Menyediakan pustaka tool otomasi sistem Windows yang aman dan handal.*
 
-- [ ] **Application Controller (`WindowsAppAdapter`)**:
+- [x] **Application Controller (`WindowsAppAdapter`)**:
   - Whitelist aplikasi umum: Microsoft Teams (`msteams:`), Browser (`msedge`, `chrome`), Media Player (`spotify:`), Terminal (`wt`, `powershell`).
   - Safe process launcher via PowerShell `Start-Process` tanpa shell injection.
-- [ ] **Power & Sleep Scheduler (`PowerAutomationAdapter`)**:
+  - Safe process termination controller via `terminateApp` dengan whitelist proses.
+- [x] **Power & Sleep Scheduler (`PowerAutomationAdapter`)**:
   - Eksekusi sleep instan via PowerShell:
     ```powershell
     Add-Type -Assembly System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)
     ```
-  - Penjadwalan sleep berbasis waktu (misal jam 23:00) menggunakan `schtasks.exe` temporer yang otomatis dibersihkan setelah selesai.
-  - Mode Stay-Awake / Anti-Sleep (Caffeine) sementara.
-- [ ] **Desktop Snapshot & Media Delivery (`DesktopCaptureAdapter`)**:
+  - Penjadwalan sleep berbasis waktu (misal jam 23:00) menggunakan `schtasks.exe` temporer.
+  - Mode Stay-Awake / Anti-Sleep (`kernel32.dll SetThreadExecutionState`) sementara.
+- [x] **Desktop Snapshot & Media Delivery (`DesktopCaptureAdapter`)**:
   - Mengambil tangkapan layar resolusi layar penuh tanpa pihak ketiga via .NET System.Drawing / PowerShell.
-  - Mengirim file gambar `.png` langsung ke chat WhatsApp sebagai media attachment.
-- [ ] **Hardware Health & System Metrics**:
+  - Mengirim file gambar `.png` langsung ke chat WhatsApp sebagai media attachment via Playwright input.
+- [x] **Hardware Health & System Metrics**:
   - Membaca status baterai: `Get-CimInstance Win32_Battery`.
-  - Membaca utilisasi RAM & CPU: `Get-CimInstance Win32_OperatingSystem`.
+  - Membaca utilisasi RAM & CPU: `Get-CimInstance Win32_OperatingSystem` & `Win32_Processor`.
+  - Membaca partisi penyimpanan disk: `Get-CimInstance Win32_LogicalDisk`.
 
 ---
 
