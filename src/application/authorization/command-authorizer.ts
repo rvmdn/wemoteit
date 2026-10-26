@@ -136,6 +136,7 @@ export class CommandAuthorizer {
     type: CommandType;
     action: string;
     targetRepoId?: string;
+    targetAgent?: string;
     prompt?: string;
     args: Record<string, unknown>;
     approvalToken?: string;

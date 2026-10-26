@@ -321,7 +321,7 @@ describe("Phase 9: Natural Language Intent Router & Windows Action Copilot", () 
     }
   });
 
-  it("routes 'tutup teams' to terminate_app intent and executes termination", async () => {
+  it("routes 'tutup teams' to terminate_app intent, asks for confirmation, and executes upon 'YA'", async () => {
     const originalFetch = global.fetch;
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -350,8 +350,22 @@ describe("Phase 9: Natural Language Intent Router & Windows Action Copilot", () 
     });
 
     try {
+      // Step 1: Send request to terminate
       const msg = { ...baseMsg, text: "tutup teams sekarang" };
       await commandRouter.processIncomingMessage(msg);
+
+      // Verify Tier 2 confirmation is requested first
+      expect(terminateSpy).not.toHaveBeenCalled();
+      expect(deliveredMessages.some((m) => m.includes("Konfirmasi Tindakan Sistem (Tier 2)"))).toBe(true);
+
+      // Step 2: Confirm with quick reply "YA"
+      const confirmMsg = {
+        ...baseMsg,
+        id: "msg-confirm-ya",
+        providerMessageId: "prov-confirm-ya",
+        text: "YA",
+      };
+      await commandRouter.processIncomingMessage(confirmMsg);
 
       expect(terminateSpy).toHaveBeenCalledWith("teams");
       expect(deliveredMessages.some((m) => m.includes("Berhasil menghentikan 1 proses untuk aplikasi *teams*"))).toBe(true);

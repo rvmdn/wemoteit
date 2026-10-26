@@ -12,6 +12,7 @@ import { AuditEvent } from "../../domain/audit/audit.entity.js";
 import { PendingApproval } from "../../domain/approval/approval.entity.js";
 import { GeminiIntentRouter } from "../../adapters/agents/gemini/gemini-intent-router.js";
 import { WindowsActionAdapter } from "../../adapters/os/windows/windows-action.adapter.js";
+import { ConfirmationManager } from "../confirmation/confirmation-manager.js";
 
 export class CommandRouter {
   constructor(
@@ -22,7 +23,8 @@ export class CommandRouter {
     private readonly deliveryService: ResultDeliveryService,
     private readonly configService: ConfigService,
     private readonly intentRouter?: GeminiIntentRouter,
-    private readonly windowsActionAdapter: WindowsActionAdapter = new WindowsActionAdapter()
+    private readonly windowsActionAdapter: WindowsActionAdapter = new WindowsActionAdapter(),
+    private readonly confirmationManager: ConfirmationManager = new ConfirmationManager()
   ) {}
 
   public async processIncomingMessage(message: NormalizedIncomingMessage): Promise<void> {
@@ -54,29 +56,143 @@ export class CommandRouter {
     await this.persistence.saveIncomingMessage(message);
     await this.recordAudit(message, "message_received", "success");
 
-    // 2. Dual-Engine: Natural Language vs Fast-Path Slash Commands
-    const isSlashCommand = message.text.trim().startsWith("/");
+    // Sender authorization pre-check
+    const senderCheck = this.authorizer.authorizeAndParse({
+      ...message,
+      text: "/status", // probe to verify sender authorization
+    });
 
-    if (!isSlashCommand && this.intentRouter) {
-      // First verify sender authorization before doing NLU
-      const senderCheck = this.authorizer.authorizeAndParse({
-        ...message,
-        text: "/status", // probe to check sender channel authorization
-      });
+    if (senderCheck.decision === "deny") {
+      correlationLogger.warn({ reason: senderCheck.reason }, "Sender not authorized");
+      await this.recordAudit(message, "authorization_denied", "denied", senderCheck.reason);
+      await this.deliveryService.deliverAcknowledgement(
+        message.conversationId,
+        message.workspaceId,
+        message.channelConnectionId,
+        message.correlationId,
+        `⚠️ *Request Denied:*\n${senderCheck.reason || "Unauthorized action"}`
+      );
+      return;
+    }
 
-      if (senderCheck.decision === "deny") {
-        correlationLogger.warn({ reason: senderCheck.reason }, "Sender not authorized for natural language command");
-        await this.recordAudit(message, "authorization_denied", "denied", senderCheck.reason);
-        await this.deliveryService.deliverAcknowledgement(
-          message.conversationId,
-          message.workspaceId,
-          message.channelConnectionId,
-          message.correlationId,
-          `⚠️ *Request Denied:*\n${senderCheck.reason || "Unauthorized action"}`
-        );
+    // 2. Check for Conversational Quick Confirmation (Phase 11: Two-Tier State Machine)
+    const textTrim = message.text.trim();
+    const isAffirmative = this.confirmationManager.isAffirmative(textTrim);
+    const isNegative = this.confirmationManager.isNegative(textTrim);
+
+    if (isAffirmative || isNegative) {
+      const pending = this.confirmationManager.getPending(message.conversationId, message.senderId);
+
+      if (isNegative) {
+        if (pending) {
+          this.confirmationManager.clearPending(message.conversationId, message.senderId);
+          if (pending.actionType === "run_task" && pending.payload.approvalId) {
+            await this.persistence.updatePendingApprovalStatus(pending.payload.approvalId, "rejected");
+          }
+          await this.deliveryService.deliverAcknowledgement(
+            message.conversationId,
+            message.workspaceId,
+            message.channelConnectionId,
+            message.correlationId,
+            `⏹️ *Tindakan Dibatalkan:*\nPermintaan *${pending.description}* telah dibatalkan.`
+          );
+        } else {
+          await this.deliveryService.deliverAcknowledgement(
+            message.conversationId,
+            message.workspaceId,
+            message.channelConnectionId,
+            message.correlationId,
+            `ℹ️ Tidak ada tindakan tertunda yang perlu dibatalkan.`
+          );
+        }
         return;
       }
 
+      if (isAffirmative) {
+        if (!pending) {
+          await this.deliveryService.deliverAcknowledgement(
+            message.conversationId,
+            message.workspaceId,
+            message.channelConnectionId,
+            message.correlationId,
+            `ℹ️ Tidak ada tindakan tertunda yang membutuhkan konfirmasi saat ini (atau batas waktu 2 menit telah habis).`
+          );
+          return;
+        }
+
+        // Clear pending item before execution
+        this.confirmationManager.clearPending(message.conversationId, message.senderId);
+
+        if (pending.actionType === "sleep") {
+          correlationLogger.info("Executing confirmed Tier 2 sleep action");
+          const res = await this.windowsActionAdapter.schedulePower("sleep", pending.payload.time);
+          await this.deliveryService.deliverAcknowledgement(
+            message.conversationId,
+            message.workspaceId,
+            message.channelConnectionId,
+            message.correlationId,
+            `✅ *Konfirmasi Diterima!*\n${res.message}`
+          );
+          return;
+        }
+
+        if (pending.actionType === "terminate_app") {
+          correlationLogger.info({ app: pending.payload.appName }, "Executing confirmed Tier 2 terminate_app action");
+          const res = await this.windowsActionAdapter.terminateApp(pending.payload.appName);
+          await this.deliveryService.deliverAcknowledgement(
+            message.conversationId,
+            message.workspaceId,
+            message.channelConnectionId,
+            message.correlationId,
+            `✅ *Konfirmasi Diterima!*\n${res.message}`
+          );
+          return;
+        }
+
+        if (pending.actionType === "run_task") {
+          correlationLogger.info({ commandId: pending.payload.commandId }, "Executing confirmed Tier 2 run_task action");
+          if (pending.payload.approvalId) {
+            await this.persistence.updatePendingApprovalStatus(pending.payload.approvalId, "approved");
+          }
+          const originalCommand = await this.persistence.getCommand(pending.payload.commandId);
+          if (originalCommand) {
+            const approvedJob = await this.jobManager.createJob(originalCommand);
+            await this.deliveryService.deliverAcknowledgement(
+              message.conversationId,
+              message.workspaceId,
+              message.channelConnectionId,
+              message.correlationId,
+              `✅ *Konfirmasi Diterima!*\nJob *${approvedJob.id}* telah dimasukkan ke dalam antrean eksekusi.`
+            );
+
+            // Execute job asynchronously
+            try {
+              const result = await this.executionCoordinator.executeJob(approvedJob, originalCommand);
+              await this.deliveryService.deliverResult(
+                approvedJob,
+                message.conversationId,
+                message.channelConnectionId,
+                result
+              );
+            } catch (err: any) {
+              await this.deliveryService.deliverAcknowledgement(
+                message.conversationId,
+                message.workspaceId,
+                message.channelConnectionId,
+                message.correlationId,
+                `❌ Eksekusi job *${approvedJob.id}* gagal: ${err.message}`
+              );
+            }
+          }
+          return;
+        }
+      }
+    }
+
+    // 3. Dual-Engine: Natural Language vs Fast-Path Slash Commands
+    const isSlashCommand = message.text.trim().startsWith("/");
+
+    if (!isSlashCommand && this.intentRouter) {
       // Query recent conversation history and registered repos for contextual intent resolution
       const recentHistory = await this.persistence.getRecentMessages(message.conversationId, 4);
       const repos = await this.persistence.listRepositoryProfiles(message.workspaceId);
@@ -101,8 +217,9 @@ export class CommandRouter {
         return this.processIncomingMessage(resolvedMsg);
       }
 
+      // Tier 1 (Safe): launch_app
       if (intent.type === "launch_app") {
-        correlationLogger.info({ app: intent.appName }, "Executing Windows launch_app action");
+        correlationLogger.info({ app: intent.appName }, "Executing Windows launch_app action (Tier 1 Safe)");
         const res = await this.windowsActionAdapter.launchApp(intent.appName, intent.args);
         await this.deliveryService.deliverAcknowledgement(
           message.conversationId,
@@ -114,21 +231,32 @@ export class CommandRouter {
         return;
       }
 
+      // Tier 2 (Destructive Process Kill): terminate_app requires quick confirmation
       if (intent.type === "terminate_app") {
-        correlationLogger.info({ app: intent.appName }, "Executing Windows terminate_app action");
-        const res = await this.windowsActionAdapter.terminateApp(intent.appName);
+        correlationLogger.info({ app: intent.appName }, "Registering Tier 2 confirmation for terminate_app");
+        this.confirmationManager.setPending(
+          message.conversationId,
+          message.senderId,
+          "terminate_app",
+          `Menutup aplikasi ${intent.appName}`,
+          { appName: intent.appName }
+        );
         await this.deliveryService.deliverAcknowledgement(
           message.conversationId,
           message.workspaceId,
           message.channelConnectionId,
           message.correlationId,
-          res.message
+          `⚠️ *Konfirmasi Tindakan Sistem (Tier 2)*\n` +
+            `Anda akan menutup aplikasi *${intent.appName}* (menghentikan proses yang sedang berjalan).\n\n` +
+            `👉 Balas *YA* dalam 2 menit untuk melanjutkan.\n` +
+            `👉 Balas *BATAL* untuk membatalkan.`
         );
         return;
       }
 
+      // Tier 1 (Safe): get_system_status
       if (intent.type === "get_system_status") {
-        correlationLogger.info({ metrics: intent.metrics }, "Querying Windows system status");
+        correlationLogger.info({ metrics: intent.metrics }, "Querying Windows system status (Tier 1 Safe)");
         const status = await this.windowsActionAdapter.getSystemStatus(intent.metrics);
         await this.deliveryService.deliverAcknowledgement(
           message.conversationId,
@@ -140,8 +268,33 @@ export class CommandRouter {
         return;
       }
 
+      // Tier 1 & 2 Power actions
       if (intent.type === "schedule_power") {
-        correlationLogger.info({ action: intent.action }, "Executing Windows schedule_power action");
+        if (intent.action === "sleep" || intent.action === "shutdown" || intent.action === "restart") {
+          // Tier 2 (Power state change) requires quick confirmation
+          correlationLogger.info({ action: intent.action }, "Registering Tier 2 confirmation for power action");
+          this.confirmationManager.setPending(
+            message.conversationId,
+            message.senderId,
+            "sleep",
+            `Sleep (Suspend)${intent.time ? ` pada pukul ${intent.time} WIB` : ""}`,
+            { time: intent.time }
+          );
+          await this.deliveryService.deliverAcknowledgement(
+            message.conversationId,
+            message.workspaceId,
+            message.channelConnectionId,
+            message.correlationId,
+            `⚠️ *Konfirmasi Tindakan Sistem (Tier 2)*\n` +
+              `Laptop Anda akan masuk mode *Sleep (Suspend)*${intent.time ? ` pada pukul *${intent.time} WIB*` : ""}.\n\n` +
+              `👉 Balas *YA* dalam 2 menit untuk melanjutkan.\n` +
+              `👉 Balas *BATAL* untuk membatalkan.`
+          );
+          return;
+        }
+
+        // Tier 1 (Safe): lock, awake, cancel_sleep
+        correlationLogger.info({ action: intent.action }, "Executing safe Windows power action (Tier 1 Safe)");
         const res = await this.windowsActionAdapter.schedulePower(intent.action, intent.time);
         await this.deliveryService.deliverAcknowledgement(
           message.conversationId,
@@ -153,8 +306,9 @@ export class CommandRouter {
         return;
       }
 
+      // Tier 1 (Safe): capture_screen
       if (intent.type === "capture_screen") {
-        correlationLogger.info("Executing Windows capture_screen action");
+        correlationLogger.info("Executing Windows capture_screen action (Tier 1 Safe)");
         const res = await this.windowsActionAdapter.captureScreen();
         const attachments = res.filePath
           ? [{ name: path.basename(res.filePath), path: res.filePath, mimeType: "image/png" }]
@@ -220,16 +374,27 @@ export class CommandRouter {
       await this.persistence.savePendingApproval(pendingApproval);
       await this.recordAudit(message, "approval_requested", "pending", authResult.reason, command.id);
 
+      // Register quick confirmation in ConfirmationManager for 1-word "YA" or "BATAL" replies
+      this.confirmationManager.setPending(
+        message.conversationId,
+        message.senderId,
+        "run_task",
+        `Coding task di repo ${command.targetRepositoryId}`,
+        { commandId: command.id, approvalId: pendingApproval.id, token }
+      );
+
       await this.deliveryService.deliverAcknowledgement(
         message.conversationId,
         message.workspaceId,
         message.channelConnectionId,
         message.correlationId,
-        `🔒 *Approval Required for Task Execution*\n` +
+        `🔒 *Approval Required / Konfirmasi Tugas Coding (Tier 2)*\n` +
           `• *Action:* ${command.requestedAction}\n` +
           `• *Repository:* ${command.targetRepositoryId}\n` +
           `• *Prompt:* "${command.arguments.prompt}"\n\n` +
-          `To authorize and execute this task, reply with:\n👉 */approve ${token}*`
+          `👉 Balas *YA* dalam 2 menit untuk melanjutkan eksekusi.\n` +
+          `👉 Balas *BATAL* untuk membatalkan.\n\n` +
+          `Atau gunakan perintah:\n👉 */approve ${token}*`
       );
       return;
     }

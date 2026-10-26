@@ -1,6 +1,6 @@
 # Project Status: wemoteit (WhatsApp AI Agent Orchestrator)
 
-## Current Status: Phase 10 Completed & Accepted (All 10 Phases Complete)
+## Current Status: Phase 11 Completed & Accepted (All 11 Phases Complete)
 
 | Phase | Description | Status | Evidence / Notes |
 |---|---|---|---|
@@ -15,6 +15,35 @@
 | **Phase 8** | Multi-Account Gemini Pool Engine & Hardening | **Completed** | Implemented quota-failover pool for up to 5 Google Gemini accounts (`migrations/003_gemini_accounts.sql`, [`GeminiAccountPoolManager`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-account-pool.ts), [`GeminiExecutionProvider`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-execution.provider.ts)), automatic rate limit recovery (HTTP 429 & 503 model overload cooldown & instant rotation), zero secret leakage with key masking, full dashboard CRUD & ping test console, dynamic provider timeout, sender phone number normalization. **69/69 automated tests passing across 14 test suites.** |
 | **Phase 9** | Natural Language Intent Router (NLU Copilot) | **Completed** | Implemented Dual-Engine router ([`GeminiIntentRouter`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-intent-router.ts)) with Gemini Function Calling, translating natural conversational requests (e.g. *"review wedocit apa itu"*, *"nyalakan teams"*, *"cek baterai"*, *"tidurkan laptop"*, *"screenshot layar"*) into structured commands and Windows OS actions ([`WindowsActionAdapter`](file:///f:/Project/Desktop/wemoteit/src/adapters/os/windows/windows-action.adapter.ts)), short-term context memory (`getRecentMessages`), preserving slash-command fast paths. **77/77 automated tests passing across 15 test suites.** |
 | **Phase 10** | Windows OS Automation Provider & Media Delivery | **Completed** | Implemented application termination controller with whitelist (`terminateApp`), hardware disk space metrics (`Win32_LogicalDisk`), scheduled sleep via Windows Task Scheduler (`schtasks`), stay-awake anti-sleep mode (`SetThreadExecutionState`), and WhatsApp media delivery for full-resolution desktop screenshots. **90/90 automated tests passing across 16 test suites.** |
+| **Phase 11** | Two-Tier Confirmation & Security Hardening | **Completed** | Implemented tiered policy enforcement (Tier 1 safe auto-approve vs Tier 2 destructive confirmation), conversational quick confirmation state machine ([`ConfirmationManager`](file:///f:/Project/Desktop/wemoteit/src/application/confirmation/confirmation-manager.ts)) with affirmative (`YA`, `YES`, `OKE`, `SETUJU`, `LANJUT`, `SIAP`) and negative (`BATAL`, `CANCEL`, `TIDAK`) recognition, 2-minute TTL, dual-support for legacy `/approve <token>`. **104/104 Vitest automated tests passing across 17 test suites.** |
+
+---
+
+## Phase 11 Implementation Summary (Two-Tier Confirmation & Security Hardening)
+
+1. **Tiered Policy Enforcement**:
+   - **Tier 1 (Safe / Auto-Approve)**: `launch_app`, `capture_screen`, `get_system_status`, `schedule_power` (`lock`, `awake`, `cancel_sleep`), `/review`, `/status`, `/repos`, `/jobs`, `/help`, and conversational questions. Auto-executed without asking confirmation.
+   - **Tier 2 (Destructive / Power / Mutating Actions)**: `schedule_power` (`sleep`, `shutdown`, `restart`), `terminate_app` (kill process), and mutating coding task `/run <repo> <prompt>`. Strictly requires two-tier confirmation before execution.
+
+2. **Conversational Quick Confirmation (`ConfirmationManager`)**:
+   - Menggantikan token statis `APP-99A1` di chat mobile dengan prompt interaktif ramah:
+     > *"⚠️ Konfirmasi: Laptop Anda akan masuk mode Sleep pada pukul 23:00 WIB. Balas **YA** dalam 2 menit untuk melanjutkan, atau **BATAL** untuk membatalkan."*
+   - Mendukung kata kunci afirmatif luas dalam Bahasa Indonesia dan Inggris: `YA`, `YES`, `Y`, `OKE`, `OK`, `SETUJU`, `LANJUT`, `SIAP`.
+   - Mendukung kata kunci pembatalan cepat: `BATAL`, `CANCEL`, `TIDAK`, `NO`, `N`.
+   - State machine dengan TTL 2 menit: aksi tertunda dibersihkan otomatis jika tidak ada konfirmasi dalam 2 menit.
+   - Mempertahankan backward compatibility penuh dengan perintah `/approve <token>`.
+
+3. **Automated Testing & Regression Suite**:
+   - **104 automated tests passing across 17 test suites in Vitest.**
+   - Ditambahkan unit test suite [`tests/unit/two-tier-confirmation.test.ts`](file:///f:/Project/Desktop/wemoteit/tests/unit/two-tier-confirmation.test.ts) yang menguji:
+     - Parsing kata kunci affirmative dan negative.
+     - Penyimpanan dan masa berlaku TTL item konfirmasi.
+     - Eksekusi tugas coding mutating via `YA`.
+     - Pembatalan tugas coding mutating via `BATAL`.
+     - Konfirmasi sleep Windows via `YA`.
+     - Pembatalan terminate_app Windows via `BATAL`.
+     - Graceful acknowledgement jika user mengirim `YA` atau `BATAL` tanpa ada aksi tertunda.
+     - Kompatibilitas dengan perintah slash `/approve <token>`.
 
 ---
 

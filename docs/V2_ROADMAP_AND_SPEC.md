@@ -58,7 +58,7 @@
 ### Phase 8: Multi-Account Gemini Pool Engine
 *Tujuan: Menanamkan engine Gemini Pro mandiri dengan manajemen kuota 5 akun.*
 
-- [ ] **Data Model & SQLite Persistence**:
+- [x] **Data Model & SQLite Persistence**:
   - Tabel `gemini_account_instances`:
     - `id` (string, PK)
     - `label` (e.g., "Akun Pribadi 1", "Akun Cadangan 2")
@@ -68,13 +68,13 @@
     - `cooldownUntil` (ISO timestamp)
     - `requestsToday` (integer)
     - `lastUsedAt` (ISO timestamp)
-- [ ] **`GeminiPoolManager`**:
+- [x] **`GeminiPoolManager`**:
   - Implementasi adapter [`GeminiExecutionProvider`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/) menggunakan SDK `@google/genai`.
   - Strategi seleksi akun:
     - `failover` (gunakan Akun 1 hingga 429, baru pindah ke Akun 2).
     - `round-robin` (bagi beban merata tiap request).
   - Circuit Breaker: Deteksi status HTTP `429 Too Many Requests` / `RESOURCE_EXHAUSTED`, otomatis set cooldown 60 detik atau reset harian, lalu ulangi request ke akun standby tanpa menggugurkan job.
-- [ ] **Web Dashboard Integration**:
+- [x] **Web Dashboard Integration**:
   - Halaman tab baru: **"AI Account Pool"** di `http://localhost:3100`.
   - Form input dan validasi status koneksi 5 Akun Google.
   - Indikator bar visual kuota harian dan status aktif per akun.
@@ -84,7 +84,7 @@
 ### Phase 9: Natural Language Intent Router (NLU Copilot)
 *Tujuan: Menerjemahkan bahasa percakapan bebas menjadi perintah terstruktur.*
 
-- [ ] **Prompt Engineering & Tool Calling Schema**:
+- [x] **Prompt Engineering & Tool Calling Schema**:
   - Definisikan schema tools resmi Gemini (`FunctionDeclaration`):
     - `launch_app(appName, args)`
     - `terminate_app(appName)`
@@ -93,10 +93,10 @@
     - `capture_screen(displayIndex)`
     - `explore_workspace(repoId, action: "list"|"read"|"search", target)`
     - `delegate_coding_task(repoId, prompt, mutating)`
-- [ ] **Dual-Engine Routing Pipeline**:
+- [x] **Dual-Engine Routing Pipeline**:
   - Jika pesan diawali slash (`/review`, `/status`, `/help`), jalankan fast path Regex lama (100% backward compatible).
   - Jika pesan berupa teks santai, teruskan ke `GeminiIntentRouter` untuk diproses via Function Calling.
-- [ ] **Context & History Retention**:
+- [x] **Context & History Retention**:
   - Menyimpan histori singkat percakapan (3–5 pesan terakhir) agar asisten memahami konteks lanjutan (misal: *"buka repo wedocit"* lalu *"coba jelaskan file background.js nya"*).
 
 ---
@@ -128,13 +128,14 @@
 ### Phase 11: Two-Tier Confirmation & Security Hardening
 *Tujuan: Memastikan PC Anda tetap aman saat diakses dari WhatsApp.*
 
-- [ ] **Tiered Policy Enforcement**:
-  - **Tier 1 (Safe / Auto-Approve)**: Buka aplikasi, ambil screenshot, baca status baterai/file, review kode.
-  - **Tier 2 (Destructive / Power Action)**: Sleep, shutdown, kill process, edit kode/file.
-- [ ] **Conversational Quick Confirmation**:
-  - Alih-alih token rumit seperti `APP-99A1`, bot akan bertanya ramah:
-    > *"⚠️ Konfirmasi: Laptop Anda akan masuk mode Sleep pada pukul 23:00 WIB. Balas **YA** dalam 2 menit untuk melanjutkan."*
-  - State machine mengenali balasan satu kata `"YA"` atau `"BATAL"` dari pengirim yang sah (`self`).
+- [x] **Tiered Policy Enforcement**:
+  - **Tier 1 (Safe / Auto-Approve)**: Buka aplikasi, ambil screenshot, baca status baterai/file/disk, review kode.
+  - **Tier 2 (Destructive / Power Action)**: Sleep, shutdown, kill process, edit kode/file (`/run`).
+- [x] **Conversational Quick Confirmation**:
+  - Alih-alih token rumit seperti `APP-99A1`, bot bertanya ramah dengan batas waktu 2 menit:
+    > *"⚠️ Konfirmasi: Laptop Anda akan masuk mode Sleep pada pukul 23:00 WIB. Balas **YA** dalam 2 menit untuk melanjutkan, atau **BATAL** untuk membatalkan."*
+  - State machine mengenali balasan satu kata (`YA`, `YES`, `Y`, `OKE`, `OK`, `SETUJU`, `LANJUT`, `SIAP` atau `BATAL`, `CANCEL`, `TIDAK`, `NO`, `N`) dari pengirim yang sah (`self`).
+  - Tetap mendukung backward compatibility perintah `/approve <token>`.
 
 ---
 
