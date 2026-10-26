@@ -79,7 +79,7 @@ export class ConfirmationManager {
    * Check if a text message is a single-word or short affirmative response
    */
   public isAffirmative(text: string): boolean {
-    const clean = text.trim().toUpperCase().replace(/[!.,]/g, "");
+    const clean = text.trim().toUpperCase().replace(/[!.,?]/g, "").replace(/\s+/g, " ");
     const affirmatives = new Set([
       "YA",
       "YES",
@@ -93,6 +93,14 @@ export class ConfirmationManager {
       "SIAP",
       "CONFIRM",
       "BOLEH",
+      "YA SILAKAN",
+      "YA TOLONG",
+      "YA LANJUT",
+      "OKE LANJUT",
+      "SIAP LANJUT",
+      "OK LANJUT",
+      "YA BOLEH",
+      "GAS",
     ]);
     return affirmatives.has(clean);
   }
@@ -101,7 +109,7 @@ export class ConfirmationManager {
    * Check if a text message is a single-word or short negative/cancellation response
    */
   public isNegative(text: string): boolean {
-    const clean = text.trim().toUpperCase().replace(/[!.,]/g, "");
+    const clean = text.trim().toUpperCase().replace(/[!.,?]/g, "").replace(/\s+/g, " ");
     const negatives = new Set([
       "BATAL",
       "BATALKAN",
@@ -115,6 +123,12 @@ export class ConfirmationManager {
       "ENGGAK",
       "ABORT",
       "TOLAK",
+      "GAK JADI",
+      "GA JADI",
+      "BATAL AJA",
+      "CANCEL AJA",
+      "JANGAN DULU",
+      "TIDAK JADI",
     ]);
     return negatives.has(clean);
   }

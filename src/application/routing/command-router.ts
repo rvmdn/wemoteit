@@ -27,6 +27,10 @@ export class CommandRouter {
     private readonly confirmationManager: ConfirmationManager = new ConfirmationManager()
   ) {}
 
+  public getConfirmationManager(): ConfirmationManager {
+    return this.confirmationManager;
+  }
+
   public async processIncomingMessage(message: NormalizedIncomingMessage): Promise<void> {
     const correlationLogger = logger.child({
       correlationId: message.correlationId,
@@ -37,7 +41,7 @@ export class CommandRouter {
     correlationLogger.info("Processing incoming message");
 
     // Strictly ignore bot notification replies to prevent echo loops in self-chat
-    if (/^[⚠️✅⏳🔒🛑🤖💻📊📂📋🔍🌙☀️🔋💾⚡📸]/.test(message.text.trim())) {
+    if (/^[⚠️✅⏳🔒🛑🤖💻📊📂📋🔍🌙☀️🔋💾⚡📸❌ℹ️⏹️⏰🚀]/.test(message.text.trim())) {
       correlationLogger.debug("Message is an automated bot response; ignoring silently to prevent feedback loop");
       return;
     }

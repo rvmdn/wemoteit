@@ -176,7 +176,7 @@ export class AntigravityExecutionProvider implements ExecutionProvider {
     const timer = setTimeout(() => {
       if (activeState.status.state === "running") {
         logger.warn({ jobId: request.jobId, handleId }, "Antigravity execution timed out; terminating");
-        child.kill("SIGTERM");
+        this.terminateChildProcess(child);
         const completedAt = new Date().toISOString();
         const durationMs = Date.now() - new Date(startedAt).getTime();
 
@@ -310,13 +310,38 @@ export class AntigravityExecutionProvider implements ExecutionProvider {
 
     try {
       if (state.process && !state.process.killed) {
-        state.process.kill("SIGTERM");
+        this.terminateChildProcess(state.process);
       }
       state.status.state = "cancelled";
       state.status.progressSummary = "Cancellation requested by operator";
       return { cancelled: true };
     } catch (err: any) {
       return { cancelled: false, reason: err.message };
+    }
+  }
+
+  private terminateChildProcess(child?: ChildProcess): void {
+    if (!child || !child.pid || child.killed) return;
+    if (process.platform === "win32") {
+      try {
+        // Kill entire process tree in Windows to prevent lingering child processes
+        spawn("taskkill", ["/pid", child.pid.toString(), "/T", "/F"], {
+          windowsHide: true,
+          stdio: "ignore",
+        });
+      } catch {
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // Ignore
+        }
+      }
+    } else {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // Ignore
+      }
     }
   }
 

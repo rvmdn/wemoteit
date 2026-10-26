@@ -30,6 +30,9 @@ describe("Phase 11: Two-Tier Confirmation & Security Hardening", () => {
       expect(manager.isAffirmative("lanjut")).toBe(true);
       expect(manager.isAffirmative("setuju.")).toBe(true);
       expect(manager.isAffirmative("siap")).toBe(true);
+      expect(manager.isAffirmative("ya silakan")).toBe(true);
+      expect(manager.isAffirmative("ya lanjut")).toBe(true);
+      expect(manager.isAffirmative("oke lanjut")).toBe(true);
       expect(manager.isAffirmative("random text")).toBe(false);
     });
 
@@ -42,6 +45,9 @@ describe("Phase 11: Two-Tier Confirmation & Security Hardening", () => {
       expect(manager.isNegative("n")).toBe(true);
       expect(manager.isNegative("jangan")).toBe(true);
       expect(manager.isNegative("gak")).toBe(true);
+      expect(manager.isNegative("gak jadi")).toBe(true);
+      expect(manager.isNegative("ga jadi")).toBe(true);
+      expect(manager.isNegative("batal aja")).toBe(true);
       expect(manager.isNegative("oke")).toBe(false);
     });
 
