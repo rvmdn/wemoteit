@@ -70,7 +70,7 @@ export class GeminiIntentRouter {
       try {
         const intent = await this.callGeminiFunctionCalling(
           account,
-          message.text,
+          message,
           recentHistory,
           registeredRepos
         );
@@ -110,10 +110,11 @@ export class GeminiIntentRouter {
 
   private async callGeminiFunctionCalling(
     account: GeminiAccountInstance,
-    userText: string,
+    message: NormalizedIncomingMessage,
     history: NormalizedIncomingMessage[],
     registeredRepos: string[]
   ): Promise<ResolvedIntent> {
+    const userText = message.text;
     const model = account.model || this.defaultModel;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${account.apiKey}`;
 
@@ -233,9 +234,12 @@ export class GeminiIntentRouter {
       },
     ];
 
-    // Build conversation context
+    // Build conversation context without duplicating current message
     const contents: any[] = [];
-    const recent = history.slice(-3);
+    const recent = history
+      .filter((h) => h.id !== message.id && h.providerMessageId !== message.providerMessageId)
+      .slice(-3);
+
     for (const h of recent) {
       contents.push({
         role: "user",
@@ -276,17 +280,22 @@ export class GeminiIntentRouter {
 
     const data: any = await response.json();
     const candidate = data.candidates?.[0];
-    const part = candidate?.content?.parts?.[0];
+    const parts = candidate?.content?.parts || [];
+    const functionCallPart = parts.find((p: any) => p.functionCall);
 
-    if (part?.functionCall) {
-      const call = part.functionCall;
+    if (functionCallPart?.functionCall) {
+      const call = functionCallPart.functionCall;
       const fnName = call.name;
       const args = call.args || {};
 
       if (fnName === "execute_slash_command") {
+        let cmd = String(args.command || "").trim();
+        if (cmd && !cmd.startsWith("/")) {
+          cmd = `/${cmd}`;
+        }
         return {
           type: "slash_command",
-          commandText: String(args.command || "").trim(),
+          commandText: cmd,
           explanation: args.explanation,
         };
       }
@@ -325,7 +334,8 @@ export class GeminiIntentRouter {
       }
     }
 
-    const text = part?.text || "Perintah Anda telah saya terima.";
+    const textPart = parts.find((p: any) => p.text);
+    const text = textPart?.text || "Perintah Anda telah saya terima.";
     return {
       type: "conversational_reply",
       replyText: text.trim(),

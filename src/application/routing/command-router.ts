@@ -85,12 +85,16 @@ export class CommandRouter {
       const intent = await this.intentRouter.resolveIntent(message, recentHistory, registeredRepoIds);
 
       if (intent.type === "slash_command") {
-        correlationLogger.info({ command: intent.commandText }, "Natural language mapped to slash command");
+        let commandText = intent.commandText.trim();
+        if (!commandText.startsWith("/")) {
+          commandText = `/${commandText}`;
+        }
+        correlationLogger.info({ command: commandText }, "Natural language mapped to slash command");
         const resolvedMsg: NormalizedIncomingMessage = {
           ...message,
           id: `${message.id}-mapped`,
           providerMessageId: `${message.providerMessageId}-mapped`,
-          text: intent.commandText,
+          text: commandText,
         };
         // Process the synthesized slash command directly
         return this.processIncomingMessage(resolvedMsg);

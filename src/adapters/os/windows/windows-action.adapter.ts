@@ -38,6 +38,9 @@ export class WindowsActionAdapter {
     vscode: { cmd: "code" },
     terminal: { cmd: "wt.exe" },
     powershell: { cmd: "powershell.exe" },
+    cmd: { cmd: "cmd.exe" },
+    explorer: { cmd: "explorer.exe" },
+    filemanager: { cmd: "explorer.exe" },
     spotify: { cmd: "spotify:" },
   };
 
@@ -122,7 +125,7 @@ export class WindowsActionAdapter {
       if (metrics === "cpu" || metrics === "all") {
         try {
           const { stdout } = await execAsync(
-            `powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).LoadPercentage"`
+            `powershell -NoProfile -Command "$c = (Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average; if ($c -ne $null) { [math]::Round($c) } else { 0 }"`
           );
           const load = Number(stdout.trim()) || 0;
           result.cpu = { loadPercentage: load };
