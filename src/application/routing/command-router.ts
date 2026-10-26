@@ -9,6 +9,8 @@ import { ConfigService } from "../../adapters/configuration/config.service.js";
 import { logger } from "../../adapters/logging/logger.js";
 import { AuditEvent } from "../../domain/audit/audit.entity.js";
 import { PendingApproval } from "../../domain/approval/approval.entity.js";
+import { GeminiIntentRouter } from "../../adapters/agents/gemini/gemini-intent-router.js";
+import { WindowsActionAdapter } from "../../adapters/os/windows/windows-action.adapter.js";
 
 export class CommandRouter {
   constructor(
@@ -17,7 +19,9 @@ export class CommandRouter {
     private readonly jobManager: JobManager,
     private readonly executionCoordinator: ExecutionCoordinator,
     private readonly deliveryService: ResultDeliveryService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly intentRouter?: GeminiIntentRouter,
+    private readonly windowsActionAdapter: WindowsActionAdapter = new WindowsActionAdapter()
   ) {}
 
   public async processIncomingMessage(message: NormalizedIncomingMessage): Promise<void> {
@@ -30,7 +34,7 @@ export class CommandRouter {
     correlationLogger.info("Processing incoming message");
 
     // Strictly ignore bot notification replies to prevent echo loops in self-chat
-    if (/^[⚠️✅⏳🔒🛑]/.test(message.text.trim())) {
+    if (/^[⚠️✅⏳🔒🛑🤖💻📊📂📋🔍🌙☀️🔋💾⚡📸]/.test(message.text.trim())) {
       correlationLogger.debug("Message is an automated bot response; ignoring silently to prevent feedback loop");
       return;
     }
@@ -49,7 +53,114 @@ export class CommandRouter {
     await this.persistence.saveIncomingMessage(message);
     await this.recordAudit(message, "message_received", "success");
 
-    // 2. Authorization & Parsing
+    // 2. Dual-Engine: Natural Language vs Fast-Path Slash Commands
+    const isSlashCommand = message.text.trim().startsWith("/");
+
+    if (!isSlashCommand && this.intentRouter) {
+      // First verify sender authorization before doing NLU
+      const senderCheck = this.authorizer.authorizeAndParse({
+        ...message,
+        text: "/status", // probe to check sender channel authorization
+      });
+
+      if (senderCheck.decision === "deny") {
+        correlationLogger.warn({ reason: senderCheck.reason }, "Sender not authorized for natural language command");
+        await this.recordAudit(message, "authorization_denied", "denied", senderCheck.reason);
+        await this.deliveryService.deliverAcknowledgement(
+          message.conversationId,
+          message.workspaceId,
+          message.channelConnectionId,
+          message.correlationId,
+          `⚠️ *Request Denied:*\n${senderCheck.reason || "Unauthorized action"}`
+        );
+        return;
+      }
+
+      // Query recent conversation history and registered repos for contextual intent resolution
+      const recentHistory = await this.persistence.getRecentMessages(message.conversationId, 4);
+      const repos = await this.persistence.listRepositoryProfiles(message.workspaceId);
+      const registeredRepoIds = repos.map((r) => r.id);
+
+      correlationLogger.info("Resolving natural language intent via GeminiIntentRouter");
+      const intent = await this.intentRouter.resolveIntent(message, recentHistory, registeredRepoIds);
+
+      if (intent.type === "slash_command") {
+        correlationLogger.info({ command: intent.commandText }, "Natural language mapped to slash command");
+        const resolvedMsg: NormalizedIncomingMessage = {
+          ...message,
+          id: `${message.id}-mapped`,
+          providerMessageId: `${message.providerMessageId}-mapped`,
+          text: intent.commandText,
+        };
+        // Process the synthesized slash command directly
+        return this.processIncomingMessage(resolvedMsg);
+      }
+
+      if (intent.type === "launch_app") {
+        correlationLogger.info({ app: intent.appName }, "Executing Windows launch_app action");
+        const res = await this.windowsActionAdapter.launchApp(intent.appName, intent.args);
+        await this.deliveryService.deliverAcknowledgement(
+          message.conversationId,
+          message.workspaceId,
+          message.channelConnectionId,
+          message.correlationId,
+          res.message
+        );
+        return;
+      }
+
+      if (intent.type === "get_system_status") {
+        correlationLogger.info({ metrics: intent.metrics }, "Querying Windows system status");
+        const status = await this.windowsActionAdapter.getSystemStatus(intent.metrics);
+        await this.deliveryService.deliverAcknowledgement(
+          message.conversationId,
+          message.workspaceId,
+          message.channelConnectionId,
+          message.correlationId,
+          status.summary
+        );
+        return;
+      }
+
+      if (intent.type === "schedule_power") {
+        correlationLogger.info({ action: intent.action }, "Executing Windows schedule_power action");
+        const res = await this.windowsActionAdapter.schedulePower(intent.action, intent.time);
+        await this.deliveryService.deliverAcknowledgement(
+          message.conversationId,
+          message.workspaceId,
+          message.channelConnectionId,
+          message.correlationId,
+          res.message
+        );
+        return;
+      }
+
+      if (intent.type === "capture_screen") {
+        correlationLogger.info("Executing Windows capture_screen action");
+        const res = await this.windowsActionAdapter.captureScreen();
+        await this.deliveryService.deliverAcknowledgement(
+          message.conversationId,
+          message.workspaceId,
+          message.channelConnectionId,
+          message.correlationId,
+          res.message
+        );
+        return;
+      }
+
+      // conversational_reply
+      correlationLogger.info("Delivering natural language conversational reply");
+      await this.deliveryService.deliverAcknowledgement(
+        message.conversationId,
+        message.workspaceId,
+        message.channelConnectionId,
+        message.correlationId,
+        `🤖 ${intent.replyText}`
+      );
+      return;
+    }
+
+    // Fast-path authorization & parsing for slash commands (or fallback if intentRouter is not active)
     const authResult = this.authorizer.authorizeAndParse(message);
 
     if (authResult.decision === "deny") {

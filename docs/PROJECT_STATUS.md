@@ -1,6 +1,6 @@
 # Project Status: wemoteit (WhatsApp AI Agent Orchestrator)
 
-## Current Status: Phase 8 Completed & Accepted (All Phases Complete)
+## Current Status: Phase 9 Completed & Accepted (All Phases Complete)
 
 | Phase | Description | Status | Evidence / Notes |
 |---|---|---|---|
@@ -13,6 +13,28 @@
 | **Phase 6** | Hardening & Production Operations | **Completed** | Implemented unified graceful lifecycle management ([`LifecycleManager`](file:///F:/Project/Desktop/wemoteit/src/app/lifecycle.ts) and [`bootstrap.ts`](file:///F:/Project/Desktop/wemoteit/src/app/bootstrap.ts)), comprehensive security regression test suite ([`tests/security/security-regression.test.ts`](file:///F:/Project/Desktop/wemoteit/tests/security/security-regression.test.ts)), detailed operations runbook ([`docs/OPERATIONS.md`](file:///F:/Project/Desktop/wemoteit/docs/OPERATIONS.md)), and user-facing documentation ([`README.md`](file:///F:/Project/Desktop/wemoteit/README.md)). **46/46 automated tests passing across 12 test suites.** |
 | **Phase 7** | Web Management Dashboard & Account Security Gate | **Completed** | Implemented native HTTP/REST Dashboard server ([`src/interfaces/web/server.ts`](file:///f:/Project/Desktop/wemoteit/src/interfaces/web/server.ts)), rich interactive Web UI ([`src/interfaces/web/public/index.html`](file:///f:/Project/Desktop/wemoteit/src/interfaces/web/public/index.html)), real-time WhatsApp Web connection & QR Code canvas extraction, authorized sender lock & persistence ([`ConfigService.updateWhatsappChannelConfig`](file:///f:/Project/Desktop/wemoteit/src/adapters/configuration/config.service.ts)), live job queue and pending approvals manager. **53/53 automated tests passing across 13 test suites.** |
 | **Phase 8** | Multi-Account Gemini Pool Engine & Hardening | **Completed** | Implemented quota-failover pool for up to 5 Google Gemini accounts (`migrations/003_gemini_accounts.sql`, [`GeminiAccountPoolManager`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-account-pool.ts), [`GeminiExecutionProvider`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-execution.provider.ts)), automatic rate limit recovery (HTTP 429 & 503 model overload cooldown & instant rotation), zero secret leakage with key masking, full dashboard CRUD & ping test console, dynamic provider timeout, sender phone number normalization. **69/69 automated tests passing across 14 test suites.** |
+| **Phase 9** | Natural Language Intent Router (NLU Copilot) | **Completed** | Implemented Dual-Engine router ([`GeminiIntentRouter`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-intent-router.ts)) with Gemini Function Calling, translating natural conversational requests (e.g. *"review wedocit apa itu"*, *"nyalakan teams"*, *"cek baterai"*, *"tidurkan laptop"*, *"screenshot layar"*) into structured commands and Windows OS actions ([`WindowsActionAdapter`](file:///f:/Project/Desktop/wemoteit/src/adapters/os/windows/windows-action.adapter.ts)), short-term context memory (`getRecentMessages`), preserving slash-command fast paths. **77/77 automated tests passing across 15 test suites.** |
+
+---
+
+## Phase 9 Implementation Summary (Natural Language Intent Router & Copilot)
+
+1. **Dual-Engine Routing Architecture**:
+   - Perintah dengan awalan `/` (`/review`, `/run`, `/status`, `/repos`, `/jobs`, `/cancel`, `/help`) dieksekusi secara instan (*fast-path*) dengan overhead nol.
+   - Pesan bahasa alami (Indonesian/English) diproses via [`GeminiIntentRouter`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-intent-router.ts) menggunakan skema Function Calling resmi Gemini yang didukung failover 5 akun Google di pool.
+
+2. **Windows OS Remote Actions (`WindowsActionAdapter`)**:
+   - `launch_app`: Membuka aplikasi desktop yang aman (Microsoft Teams, Edge, Chrome, VS Code, Notepad, Calc, Terminal, Spotify).
+   - `get_system_status`: Membaca telemetri perangkat keras Windows (persentase baterai & status charger, penggunaan RAM dalam GB & %, CPU load %).
+   - `schedule_power`: Mengunci layar Windows instan (*Lock Workstation*) atau menidurkan laptop (*Sleep/Suspend* via .NET SetSuspendState).
+   - `capture_screen`: Mengambil tangkapan layar desktop resolusi penuh dan menyimpannya di `./data/screenshots/`.
+
+3. **Short-Term Context Memory**:
+   - Mengambil 3–4 riwayat pesan percakapan terakhir via [`persistence.getRecentMessages()`](file:///f:/Project/Desktop/wemoteit/src/adapters/persistence/sqlite/sqlite.repository.ts) sehingga asisten memahami konteks tindak lanjut percakapan.
+
+4. **Automated Testing**:
+   - **77 automated tests passing across 15 test suites in Vitest.**
+   - Pengujian mencakup pemetaan function calling, eksekusi aksi Windows, penolakan pengirim ilegal pada pesan santai, dan kelancaran fast-path.
 
 ---
 

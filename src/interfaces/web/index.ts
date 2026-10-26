@@ -11,6 +11,7 @@ import { JobManager } from "../../application/jobs/job-manager.js";
 import { ExecutionCoordinator } from "../../application/execution/execution-coordinator.js";
 import { ResultDeliveryService } from "../../application/delivery/result-delivery.service.js";
 import { CommandRouter } from "../../application/routing/command-router.js";
+import { GeminiIntentRouter } from "../../adapters/agents/gemini/gemini-intent-router.js";
 import { LifecycleManager } from "../../app/lifecycle.js";
 import { DashboardWebServer } from "./server.js";
 import { logger } from "../../adapters/logging/logger.js";
@@ -88,6 +89,7 @@ export async function startDashboard(port = 3100) {
   const authorizer = new CommandAuthorizer(configService);
   const coordinator = new ExecutionCoordinator(jobManager, persistence, providerRegistry);
   const delivery = new ResultDeliveryService(whatsappAdapter, persistence);
+  const intentRouter = new GeminiIntentRouter(geminiPoolManager);
 
   const router = new CommandRouter(
     persistence,
@@ -95,7 +97,8 @@ export async function startDashboard(port = 3100) {
     jobManager,
     coordinator,
     delivery,
-    configService
+    configService,
+    intentRouter
   );
 
   whatsappAdapter.onMessage(async (msg) => {

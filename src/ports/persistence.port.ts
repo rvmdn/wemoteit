@@ -38,6 +38,10 @@ export interface PersistencePort {
     channelConnectionId: string,
     providerMessageId: string
   ): Promise<NormalizedIncomingMessage | null>;
+  getRecentMessages(
+    conversationId: string,
+    limit?: number
+  ): Promise<NormalizedIncomingMessage[]>;
 
   // Commands
   saveCommand(command: Command): Promise<void>;

@@ -43,7 +43,7 @@ export class CommandAuthorizer {
       channelConfig.authorizedSenderId === "*" ||
       channelConfig.authorizedSenderId === message.senderId ||
       authSenderNorm === msgSenderNorm ||
-      (channelConfig.authorizedSenderId === "self" && (message.senderId === "self" || message.conversationId === "self"));
+      (channelConfig.authorizedSenderId === "self" && message.senderId === "self");
 
     if (!isAuthorizedSender) {
       return {

@@ -220,6 +220,41 @@ export class SqlitePersistenceRepository implements PersistencePort {
     });
   }
 
+  public async getRecentMessages(
+    conversationId: string,
+    limit: number = 5
+  ): Promise<NormalizedIncomingMessage[]> {
+    const db = this.dbHelper.getRawDb();
+    const rows = db
+      .prepare(`
+        SELECT * FROM incoming_messages
+        WHERE conversation_id = ?
+        ORDER BY rowid DESC
+        LIMIT ?
+      `)
+      .all(conversationId, limit) as any[];
+
+    return rows.reverse().map((row) =>
+      NormalizedIncomingMessageSchema.parse({
+        id: row.id,
+        schemaVersion: row.schema_version,
+        workspaceId: row.workspace_id,
+        channelConnectionId: row.channel_connection_id,
+        sourceType: row.source_type,
+        providerMessageId: row.provider_message_id,
+        conversationId: row.conversation_id,
+        senderId: row.sender_id,
+        senderType: row.sender_type,
+        messageType: row.message_type,
+        text: row.text,
+        attachments: JSON.parse(row.attachments),
+        receivedAt: row.received_at,
+        correlationId: row.correlation_id,
+        metadata: JSON.parse(row.metadata),
+      })
+    );
+  }
+
   // Commands
   public async saveCommand(command: Command): Promise<void> {
     const validated = CommandSchema.parse(command);

@@ -420,8 +420,8 @@ export class WhatsAppWebAdapter implements InputChannelAdapter, OutputChannelAda
         return;
       }
 
-      // In self-chat, only process messages starting with '/' command prefix
-      if (!rawMsg.text.trim().startsWith("/")) {
+      // Ignore bot notification prefixes in self-chat to prevent feedback loops
+      if (/^[⚠️✅⏳🔒🛑🤖💻📊📂📋🔍🌙☀️🔋💾⚡📸]/.test(rawMsg.text.trim())) {
         return;
       }
 

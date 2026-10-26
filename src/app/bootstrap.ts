@@ -11,6 +11,7 @@ import { JobManager } from "../application/jobs/job-manager.js";
 import { ExecutionCoordinator } from "../application/execution/execution-coordinator.js";
 import { ResultDeliveryService } from "../application/delivery/result-delivery.service.js";
 import { CommandRouter } from "../application/routing/command-router.js";
+import { GeminiIntentRouter } from "../adapters/agents/gemini/gemini-intent-router.js";
 import { LifecycleManager } from "./lifecycle.js";
 import { logger } from "../adapters/logging/logger.js";
 
@@ -90,6 +91,7 @@ export async function bootstrap() {
   const authorizer = new CommandAuthorizer(configService);
   const coordinator = new ExecutionCoordinator(jobManager, persistence, providerRegistry);
   const delivery = new ResultDeliveryService(channelAdapter, persistence);
+  const intentRouter = new GeminiIntentRouter(geminiPoolManager);
 
   const router = new CommandRouter(
     persistence,
@@ -97,7 +99,8 @@ export async function bootstrap() {
     jobManager,
     coordinator,
     delivery,
-    configService
+    configService,
+    intentRouter
   );
 
   channelAdapter.onMessage(async (msg) => {
