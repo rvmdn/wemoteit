@@ -1,0 +1,13 @@
+channels:
+  whatsapp:
+    enabled: false
+    provider: whatsapp
+    authorizedSenderId: self
+    authorizedConversationId: self
+    headless: true
+    sessionDataDir: ./data/whatsapp_session
+  mock:
+    enabled: true
+    provider: mock
+    authorizedSenderId: user_123
+    authorizedConversationId: chat_123

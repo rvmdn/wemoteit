@@ -1,0 +1,9 @@
+agents:
+  antigravity:
+    enabled: false
+    executionMode: mock
+    maxTimeoutMs: 120000
+  mock:
+    enabled: true
+    executionMode: mock
+    maxTimeoutMs: 30000

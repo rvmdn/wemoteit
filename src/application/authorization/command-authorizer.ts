@@ -1,0 +1,212 @@
+import crypto from "node:crypto";
+import {
+  NormalizedIncomingMessage,
+  Command,
+  CommandSchema,
+  CommandType,
+  AuthorizationDecision,
+} from "../../domain/index.js";
+import { ConfigService } from "../../adapters/configuration/config.service.js";
+
+export interface AuthorizationResult {
+  decision: AuthorizationDecision;
+  reason?: string;
+  command?: Command;
+}
+
+export class CommandAuthorizer {
+  constructor(private readonly configService: ConfigService) {}
+
+  public authorizeAndParse(message: NormalizedIncomingMessage): AuthorizationResult {
+    const config = this.configService.getConfig();
+
+    // 1. Channel sender & conversation verification
+    const channelConfig =
+      message.sourceType === "whatsapp"
+        ? config.channels.whatsapp
+        : config.channels.mock;
+
+    if (!channelConfig.enabled) {
+      return {
+        decision: "deny",
+        reason: `Channel provider '${message.sourceType}' is disabled in configuration.`,
+      };
+    }
+
+    if (
+      channelConfig.authorizedSenderId !== "*" &&
+      channelConfig.authorizedSenderId !== message.senderId
+    ) {
+      return {
+        decision: "deny",
+        reason: `Sender ID '${message.senderId}' is not authorized.`,
+      };
+    }
+
+    if (
+      channelConfig.authorizedConversationId !== "*" &&
+      channelConfig.authorizedConversationId !== message.conversationId
+    ) {
+      return {
+        decision: "deny",
+        reason: `Conversation ID '${message.conversationId}' is not authorized.`,
+      };
+    }
+
+    // 2. Command Parsing
+    const parsedCommand = this.parseMessageText(message);
+    if (!parsedCommand) {
+      return {
+        decision: "deny",
+        reason: "Unrecognized command format. Type /help to see available commands.",
+      };
+    }
+
+    // 3. Command-specific authorization checks
+    if (parsedCommand.type === "run_task" || parsedCommand.type === "review_repository") {
+      const repoId = parsedCommand.targetRepoId;
+      if (!repoId) {
+        return {
+          decision: "deny",
+          reason: "Target repository ID is required for task execution.",
+        };
+      }
+
+      const repo = this.configService.resolveRepository(repoId);
+      if (!repo) {
+        return {
+          decision: "deny",
+          reason: `Repository '${repoId}' is not registered or is disabled.`,
+        };
+      }
+
+      const isReadOnly = parsedCommand.type === "review_repository";
+      if (!isReadOnly && config.policies.requireApprovalForModification && !parsedCommand.approvalToken) {
+        const cmd = this.buildDomainCommand(
+          message,
+          parsedCommand,
+          "require_approval",
+          "Task requires explicit approval token or configured policy flag."
+        );
+        return {
+          decision: "require_approval",
+          reason: "Task requires explicit approval.",
+          command: cmd,
+        };
+      }
+    }
+
+    const command = this.buildDomainCommand(message, parsedCommand, "allow");
+    return {
+      decision: "allow",
+      command,
+    };
+  }
+
+  private parseMessageText(message: NormalizedIncomingMessage): {
+    type: CommandType;
+    action: string;
+    targetRepoId?: string;
+    prompt?: string;
+    args: Record<string, unknown>;
+    approvalToken?: string;
+  } | null {
+    const text = message.text.trim();
+
+    if (text === "/help" || text === "help") {
+      return { type: "help", action: "display_help", args: {} };
+    }
+
+    if (text === "/status" || text === "status") {
+      return { type: "status", action: "display_status", args: {} };
+    }
+
+    if (text === "/repos" || text === "/repositories" || text === "list_repositories") {
+      return { type: "list_repositories", action: "list_repositories", args: {} };
+    }
+
+    if (text === "/jobs" || text === "jobs") {
+      return { type: "job_status", action: "list_jobs", args: {} };
+    }
+
+    // Match /review <repo>
+    const reviewMatch = text.match(/^\/(?:review)\s+([a-zA-Z0-9_-]+)/i);
+    if (reviewMatch) {
+      return {
+        type: "review_repository",
+        action: "review",
+        targetRepoId: reviewMatch[1],
+        args: { repositoryId: reviewMatch[1] },
+      };
+    }
+
+    // Match /run <repo> <prompt> [--approve=<token>]
+    const runMatch = text.match(/^\/(?:run|task)\s+([a-zA-Z0-9_-]+)\s+(.+)/is);
+    if (runMatch) {
+      let prompt = runMatch[2].trim();
+      let approvalToken: string | undefined;
+
+      const tokenMatch = prompt.match(/--approve=([a-zA-Z0-9_-]+)/);
+      if (tokenMatch) {
+        approvalToken = tokenMatch[1];
+        prompt = prompt.replace(tokenMatch[0], "").trim();
+      }
+
+      return {
+        type: "run_task",
+        action: "run_task",
+        targetRepoId: runMatch[1],
+        prompt,
+        args: { prompt, repositoryId: runMatch[1] },
+        approvalToken,
+      };
+    }
+
+    // Match /cancel <jobId>
+    const cancelMatch = text.match(/^\/(?:cancel)\s+([a-zA-Z0-9_-]+)/i);
+    if (cancelMatch) {
+      return {
+        type: "cancel_job",
+        action: "cancel_job",
+        args: { targetJobId: cancelMatch[1] },
+      };
+    }
+
+    return null;
+  }
+
+  private buildDomainCommand(
+    message: NormalizedIncomingMessage,
+    parsed: {
+      type: CommandType;
+      action: string;
+      targetRepoId?: string;
+      prompt?: string;
+      args: Record<string, unknown>;
+      approvalToken?: string;
+    },
+    decision: AuthorizationDecision,
+    reason?: string
+  ): Command {
+    const commandId = `cmd-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+    const targetAgent = "mock"; // Default agent provider in Phase 1
+
+    return CommandSchema.parse({
+      id: commandId,
+      schemaVersion: 1,
+      workspaceId: message.workspaceId,
+      commandType: parsed.type,
+      requestedAction: parsed.action,
+      arguments: parsed.args,
+      targetRepositoryId: parsed.targetRepoId ?? null,
+      targetAgentProfileId: targetAgent,
+      authorizationDecision: decision,
+      authorizationReason: reason,
+      approvalRequirement: decision === "require_approval",
+      approvalToken: parsed.approvalToken ?? null,
+      sourceMessageId: message.id,
+      correlationId: message.correlationId,
+      createdAt: new Date().toISOString(),
+    });
+  }
+}

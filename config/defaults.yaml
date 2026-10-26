@@ -1,0 +1,13 @@
+version: 1
+
+workspace:
+  id: ws-primary
+  name: Primary Workspace
+
+policies:
+  allowArbitraryShell: false
+  autoApproveReadOnly: true
+  requireApprovalForModification: true
+  maxMessageLength: 8000
+  maxExecutionTimeMs: 300000
+  databasePath: ./data/wemoteit.db

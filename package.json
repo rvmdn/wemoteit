@@ -1,0 +1,41 @@
+{
+  "name": "wemoteit",
+  "version": "1.0.0",
+  "description": "Local-first WhatsApp AI Agent Orchestrator",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "wemoteit": "dist/interfaces/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cli": "tsx src/interfaces/cli/index.ts",
+    "start": "tsx src/app/bootstrap.ts"
+  },
+  "keywords": [
+    "whatsapp",
+    "agent",
+    "orchestrator",
+    "antigravity",
+    "local-first"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "commander": "^15.0.0",
+    "pino": "^10.4.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "pino-pretty": "^13.2.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

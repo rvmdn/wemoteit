@@ -1,0 +1,24 @@
+repositories:
+  - id: wedocit
+    name: wedocit
+    description: Document editor project
+    path: F:/Project/Desktop/wedocit
+    allowedOperations:
+      - read
+      - review
+    allowedBranches:
+      - main
+      - master
+    enabled: true
+
+  - id: scanwitme
+    name: scanwitme
+    description: Manga/manhwa screen capture & translation
+    path: F:/Project/Desktop/scanwitme
+    allowedOperations:
+      - read
+      - review
+    allowedBranches:
+      - main
+      - master
+    enabled: true
