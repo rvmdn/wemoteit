@@ -7,3 +7,4 @@ export * from "./agent/agent.entity.js";
 export * from "./job/job.entity.js";
 export * from "./result/result.entity.js";
 export * from "./audit/audit.entity.js";
+export * from "./approval/approval.entity.js";

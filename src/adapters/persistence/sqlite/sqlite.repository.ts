@@ -23,6 +23,8 @@ import {
   JobSchema,
   ExecutionResultSchema,
   AuditEventSchema,
+  PendingApproval,
+  PendingApprovalSchema,
 } from "../../../domain/index.js";
 
 export class SqlitePersistenceRepository implements PersistencePort {
@@ -593,6 +595,81 @@ export class SqlitePersistenceRepository implements PersistencePort {
         correlationId: r.correlation_id,
         occurredAt: r.occurred_at,
         details: JSON.parse(r.details),
+      })
+    );
+  }
+
+  // Pending Approvals
+  public async savePendingApproval(approval: PendingApproval): Promise<void> {
+    const validated = PendingApprovalSchema.parse(approval);
+    const db = this.dbHelper.getRawDb();
+    db.prepare(`
+      INSERT INTO pending_approvals (
+        id, command_id, token, workspace_id, requested_by, action,
+        repository_id, prompt, expires_at, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status
+    `).run(
+      validated.id,
+      validated.commandId,
+      validated.token,
+      validated.workspaceId,
+      validated.requestedBy,
+      validated.action,
+      validated.repositoryId,
+      validated.prompt,
+      validated.expiresAt,
+      validated.status,
+      validated.createdAt
+    );
+  }
+
+  public async getPendingApprovalByToken(token: string): Promise<PendingApproval | null> {
+    const db = this.dbHelper.getRawDb();
+    const row = db.prepare("SELECT * FROM pending_approvals WHERE token = ?").get(token) as any;
+    if (!row) return null;
+    return PendingApprovalSchema.parse({
+      id: row.id,
+      commandId: row.command_id,
+      token: row.token,
+      workspaceId: row.workspace_id,
+      requestedBy: row.requested_by,
+      action: row.action,
+      repositoryId: row.repository_id,
+      prompt: row.prompt,
+      expiresAt: row.expires_at,
+      status: row.status,
+      createdAt: row.created_at,
+    });
+  }
+
+  public async updatePendingApprovalStatus(
+    id: string,
+    status: "pending" | "approved" | "rejected" | "expired"
+  ): Promise<void> {
+    const db = this.dbHelper.getRawDb();
+    db.prepare("UPDATE pending_approvals SET status = ? WHERE id = ?").run(status, id);
+  }
+
+  public async listPendingApprovals(workspaceId: string): Promise<PendingApproval[]> {
+    const db = this.dbHelper.getRawDb();
+    const rows = db.prepare(
+      "SELECT * FROM pending_approvals WHERE workspace_id = ? AND status = 'pending' ORDER BY created_at DESC"
+    ).all(workspaceId) as any[];
+    return rows.map((row) =>
+      PendingApprovalSchema.parse({
+        id: row.id,
+        commandId: row.command_id,
+        token: row.token,
+        workspaceId: row.workspace_id,
+        requestedBy: row.requested_by,
+        action: row.action,
+        repositoryId: row.repository_id,
+        prompt: row.prompt,
+        expiresAt: row.expires_at,
+        status: row.status,
+        createdAt: row.created_at,
       })
     );
   }

@@ -5,8 +5,10 @@ export const CommandTypeSchema = z.enum([
   "status",
   "list_repositories",
   "job_status",
+  "job_detail",
   "review_repository",
   "run_task",
+  "approve_task",
   "cancel_job",
 ]);
 export type CommandType = z.infer<typeof CommandTypeSchema>;

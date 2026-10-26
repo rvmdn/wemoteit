@@ -81,4 +81,26 @@ describe("Command Authorizer", () => {
     expect(res.decision).toBe("allow");
     expect(res.command?.approvalToken).toBe("tok123");
   });
+
+  it("parses /job <id> inspection command", () => {
+    const msg = {
+      ...baseMessage,
+      text: "/job job-123456",
+    };
+    const res = authorizer.authorizeAndParse(msg);
+    expect(res.decision).toBe("allow");
+    expect(res.command?.commandType).toBe("job_detail");
+    expect(res.command?.arguments.targetJobId).toBe("job-123456");
+  });
+
+  it("parses /approve <token> command", () => {
+    const msg = {
+      ...baseMessage,
+      text: "/approve APP-99A1",
+    };
+    const res = authorizer.authorizeAndParse(msg);
+    expect(res.decision).toBe("allow");
+    expect(res.command?.commandType).toBe("approve_task");
+    expect(res.command?.arguments.token).toBe("APP-99A1");
+  });
 });

@@ -11,6 +11,7 @@ import {
   ExecutionResult,
   AuditEvent,
   JobStatus,
+  PendingApproval,
 } from "../domain/index.js";
 
 export interface PersistencePort {
@@ -60,4 +61,13 @@ export interface PersistencePort {
   getExecutionResult(jobId: string): Promise<ExecutionResult | null>;
   saveAuditEvent(event: AuditEvent): Promise<void>;
   listAuditEvents(correlationId?: string): Promise<AuditEvent[]>;
+
+  // Pending Approvals
+  savePendingApproval(approval: PendingApproval): Promise<void>;
+  getPendingApprovalByToken(token: string): Promise<PendingApproval | null>;
+  updatePendingApprovalStatus(
+    id: string,
+    status: "pending" | "approved" | "rejected" | "expired"
+  ): Promise<void>;
+  listPendingApprovals(workspaceId: string): Promise<PendingApproval[]>;
 }

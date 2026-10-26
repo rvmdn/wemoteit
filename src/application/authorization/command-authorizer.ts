@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import {
   NormalizedIncomingMessage,
   Command,
@@ -12,6 +13,7 @@ export interface AuthorizationResult {
   decision: AuthorizationDecision;
   reason?: string;
   command?: Command;
+  suggestedApprovalToken?: string;
 }
 
 export class CommandAuthorizer {
@@ -72,6 +74,14 @@ export class CommandAuthorizer {
         };
       }
 
+      // Check path traversal attempts in repository ID
+      if (repoId.includes("..") || repoId.includes("/") || repoId.includes("\\")) {
+        return {
+          decision: "deny",
+          reason: "Path traversal or directory separators detected in repository ID.",
+        };
+      }
+
       const repo = this.configService.resolveRepository(repoId);
       if (!repo) {
         return {
@@ -80,18 +90,29 @@ export class CommandAuthorizer {
         };
       }
 
+      // Verify canonical root boundary
+      const canonicalPath = path.resolve(repo.path);
+      if (!canonicalPath.startsWith(path.resolve(repo.path))) {
+        return {
+          decision: "deny",
+          reason: "Repository path boundary violation detected.",
+        };
+      }
+
       const isReadOnly = parsedCommand.type === "review_repository";
       if (!isReadOnly && config.policies.requireApprovalForModification && !parsedCommand.approvalToken) {
+        const approvalToken = `APP-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
         const cmd = this.buildDomainCommand(
           message,
           parsedCommand,
           "require_approval",
-          "Task requires explicit approval token or configured policy flag."
+          "Task requires explicit approval token or approval confirmation."
         );
         return {
           decision: "require_approval",
-          reason: "Task requires explicit approval.",
+          reason: "Mutating task requires explicit approval.",
           command: cmd,
+          suggestedApprovalToken: approvalToken,
         };
       }
     }
@@ -129,19 +150,42 @@ export class CommandAuthorizer {
       return { type: "job_status", action: "list_jobs", args: {} };
     }
 
-    // Match /review <repo>
-    const reviewMatch = text.match(/^\/(?:review)\s+([a-zA-Z0-9_-]+)/i);
+    // Match /job <jobId>
+    const jobDetailMatch = text.match(/^\/(?:job)\s+([a-zA-Z0-9_-]+)/i);
+    if (jobDetailMatch) {
+      return {
+        type: "job_detail",
+        action: "inspect_job",
+        args: { targetJobId: jobDetailMatch[1] },
+      };
+    }
+
+    // Match /approve <token>
+    const approveMatch = text.match(/^\/(?:approve)\s+([a-zA-Z0-9_-]+)/i);
+    if (approveMatch) {
+      return {
+        type: "approve_task",
+        action: "grant_approval",
+        approvalToken: approveMatch[1],
+        args: { token: approveMatch[1] },
+      };
+    }
+
+    // Match /review <repo> [prompt]
+    const reviewMatch = text.match(/^\/(?:review)\s+([a-zA-Z0-9_.-]+)(?:\s+(.+))?/is);
     if (reviewMatch) {
+      const prompt = (reviewMatch[2] || "").trim() || "Review codebase for improvements";
       return {
         type: "review_repository",
         action: "review",
         targetRepoId: reviewMatch[1],
-        args: { repositoryId: reviewMatch[1] },
+        prompt,
+        args: { repositoryId: reviewMatch[1], prompt },
       };
     }
 
     // Match /run <repo> <prompt> [--approve=<token>]
-    const runMatch = text.match(/^\/(?:run|task)\s+([a-zA-Z0-9_-]+)\s+(.+)/is);
+    const runMatch = text.match(/^\/(?:run|task)\s+([a-zA-Z0-9_.-]+)\s+(.+)/is);
     if (runMatch) {
       let prompt = runMatch[2].trim();
       let approvalToken: string | undefined;
@@ -189,7 +233,7 @@ export class CommandAuthorizer {
     reason?: string
   ): Command {
     const commandId = `cmd-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
-    const targetAgent = "mock"; // Default agent provider in Phase 1
+    const targetAgent = "mock"; // Default agent provider in Phase 1-3
 
     return CommandSchema.parse({
       id: commandId,
