@@ -38,7 +38,13 @@ export class WindowsActionAdapter {
   private readonly execFn: CommandExecutor;
 
   constructor(execFn?: CommandExecutor) {
-    this.execFn = execFn ?? (promisify(exec) as CommandExecutor);
+    this.execFn =
+      execFn ??
+      ((cmd: string) =>
+        promisify(exec)(cmd, {
+          timeout: 15000,
+          windowsHide: true,
+        }));
   }
 
   private allowedApps: Record<string, { cmd: string; uri?: string }> = {
@@ -96,7 +102,14 @@ export class WindowsActionAdapter {
     }
 
     try {
-      const target = args ? `Start-Process "${app.cmd}" -ArgumentList "${args.replace(/"/g, '`"')}"` : `Start-Process "${app.cmd}"`;
+      let target: string;
+      if (args && args.trim()) {
+        // Strip dangerous PowerShell operators and subexpressions to prevent injection
+        const cleanArgs = args.replace(/[\$;|&`<>]/g, "").replace(/"/g, '`"').trim();
+        target = `Start-Process "${app.cmd}" -ArgumentList "${cleanArgs}"`;
+      } else {
+        target = `Start-Process "${app.cmd}"`;
+      }
       await this.execFn(`powershell -NoProfile -Command "${target}"`);
       logger.info({ appName, args }, "Windows desktop application launched successfully");
       return {
@@ -251,10 +264,10 @@ export class WindowsActionAdapter {
   }
 
   /**
-   * Schedule or trigger power state action (lock, sleep, awake)
+   * Schedule or trigger power state action (lock, sleep, awake, cancel_sleep)
    */
   public async schedulePower(
-    action: "sleep" | "lock" | "shutdown" | "restart" | "awake",
+    action: "sleep" | "lock" | "shutdown" | "restart" | "awake" | "cancel_sleep",
     time?: string
   ): Promise<{ success: boolean; message: string }> {
     if (action === "lock") {
@@ -269,20 +282,38 @@ export class WindowsActionAdapter {
       }
     }
 
+    if (action === "cancel_sleep") {
+      try {
+        await this.execFn('schtasks /delete /tn "WemoteIt_ScheduledSleep" /f');
+        logger.info("Cancelled scheduled sleep task in Windows Task Scheduler");
+        return {
+          success: true,
+          message: "⏹️ *Jadwal Sleep Dibatalkan:* Tugas otomatis sleep telah dihapus dari Task Scheduler.",
+        };
+      } catch {
+        return {
+          success: true,
+          message: "ℹ️ Tidak ditemukan jadwal sleep aktif yang perlu dibatalkan.",
+        };
+      }
+    }
+
     if (action === "sleep") {
-      // Check if a future time schedule was provided (e.g. "23:00" or "in 15 minutes")
+      // Check if a future time schedule was provided (e.g. "23:00" or "08:30")
       if (time && time.trim()) {
         const timeStr = time.trim();
         // Check HH:mm format (24-hour)
-        const timeMatch = timeStr.match(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/);
+        const timeMatch = timeStr.match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
         if (timeMatch) {
+          const parts = timeStr.split(":");
+          const formattedTime = `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}`;
           try {
-            const taskCmd = `schtasks /create /tn "WemoteIt_ScheduledSleep" /tr "powershell -NoProfile -Command Add-Type -Assembly System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)" /sc once /st ${timeStr} /f`;
+            const taskCmd = `schtasks /create /tn "WemoteIt_ScheduledSleep" /tr "powershell -NoProfile -Command Add-Type -Assembly System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)" /sc once /st ${formattedTime} /f`;
             await this.execFn(taskCmd);
-            logger.info({ timeStr }, "Scheduled sleep task registered with Windows Task Scheduler");
+            logger.info({ formattedTime }, "Scheduled sleep task registered with Windows Task Scheduler");
             return {
               success: true,
-              message: `⏰ *Jadwal Sleep Terpasang:* Komputer dijadwalkan masuk mode Sleep pada pukul *${timeStr} WIB*.`,
+              message: `⏰ *Jadwal Sleep Terpasang:* Komputer dijadwalkan masuk mode Sleep pada pukul *${formattedTime} WIB*.`,
             };
           } catch (taskErr: any) {
             logger.warn({ error: taskErr.message }, "Task scheduler failed, falling back to instant notice");
@@ -341,10 +372,29 @@ $ste::SetThreadExecutionState(0x80000003)
     const screenshotDir = path.resolve("./data/screenshots");
     if (!fs.existsSync(screenshotDir)) {
       fs.mkdirSync(screenshotDir, { recursive: true });
+    } else {
+      // Auto-cleanup: keep at most 30 recent screenshots
+      try {
+        const files = fs.readdirSync(screenshotDir).map((f) => path.join(screenshotDir, f));
+        if (files.length > 30) {
+          files.sort((a, b) => fs.statSync(a).mtimeMs - fs.statSync(b).mtimeMs);
+          const toDelete = files.slice(0, files.length - 25);
+          for (const f of toDelete) {
+            try {
+              fs.unlinkSync(f);
+            } catch {
+              // Ignore unlink error
+            }
+          }
+        }
+      } catch {
+        // Ignore cleanup error
+      }
     }
 
     const filename = `screenshot-${Date.now()}.png`;
     const fullPath = path.join(screenshotDir, filename);
+    const safeScriptPath = fullPath.replace(/'/g, "''").replace(/\\/g, "/");
 
     const psScript = `
 Add-Type -AssemblyName System.Windows.Forms
@@ -353,7 +403,7 @@ $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
 $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 $graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
-$bitmap.Save('${fullPath.replace(/\\/g, "/")}', [System.Drawing.Imaging.ImageFormat]::Png)
+$bitmap.Save('${safeScriptPath}', [System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()
 `;

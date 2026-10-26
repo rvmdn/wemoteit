@@ -27,7 +27,7 @@ export type ResolvedIntent =
     }
   | {
       type: "schedule_power";
-      action: "sleep" | "lock" | "shutdown" | "restart" | "awake";
+      action: "sleep" | "lock" | "shutdown" | "restart" | "awake" | "cancel_sleep";
       time?: string;
       explanation?: string;
     }
@@ -134,7 +134,7 @@ export class GeminiIntentRouter {
       "4. If user asks to open or start an application (e.g. 'nyalakan teams', 'buka browser', 'buka edge', 'buka notepad', 'buka visual studio code'), call 'launch_app'.\n" +
       "5. If user asks to close, terminate, or kill an application (e.g. 'tutup teams', 'close edge', 'kill notepad', 'matikan browser'), call 'terminate_app'.\n" +
       "6. If user asks about battery, cpu, ram, or disk space (e.g. 'cek baterai laptop', 'sisa baterai berapa', 'cek ram', 'cek disk', 'sisa harddisk'), call 'get_system_status'.\n" +
-      "7. If user asks to sleep, lock, or keep awake Windows (e.g. 'tidurkan laptop', 'kunci layar', 'sleep sekarang', 'stay awake'), call 'schedule_power'.\n" +
+      "7. If user asks to sleep, lock, keep awake, or cancel scheduled sleep (e.g. 'tidurkan laptop', 'kunci layar', 'sleep sekarang', 'stay awake', 'batal sleep', 'batalkan jadwal tidur'), call 'schedule_power'.\n" +
       "8. If user asks for screenshot (e.g. 'foto layar desktop', 'screenshot desktop'), call 'capture_screen'.\n" +
       "9. For greetings or general questions, reply politely and conversationally in Indonesian without calling tools.";
 
@@ -220,13 +220,13 @@ export class GeminiIntentRouter {
           },
           {
             name: "schedule_power",
-            description: "Control Windows power state such as sleep (suspend), lock screen, awake, or shutdown.",
+            description: "Control Windows power state such as sleep (suspend), lock screen, awake, cancel sleep, or shutdown.",
             parameters: {
               type: "OBJECT",
               properties: {
                 action: {
                   type: "STRING",
-                  enum: ["sleep", "lock", "shutdown", "restart", "awake"],
+                  enum: ["sleep", "lock", "shutdown", "restart", "awake", "cancel_sleep"],
                   description: "Power action to perform",
                 },
                 time: {

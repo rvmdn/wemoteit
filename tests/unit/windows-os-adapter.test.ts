@@ -98,15 +98,31 @@ describe("Phase 10: Windows OS Automation Provider & Media Delivery", () => {
     });
   });
 
+    it("should sanitize arguments in launchApp to prevent PowerShell injection", async () => {
+      await adapter.launchApp("edge", "https://example.com;$malicious;`calc`");
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('Start-Process "msedge.exe" -ArgumentList "https://example.commaliciouscalc"')
+      );
+    });
+
   describe("Power & Sleep Scheduler (schedulePower)", () => {
-    it("should schedule sleep task when future time is provided", async () => {
+    it("should schedule sleep task when future time is provided with auto-padding", async () => {
       mockExec.mockResolvedValueOnce({ stdout: "SUCCESS", stderr: "" });
 
-      const result = await adapter.schedulePower("sleep", "23:00");
+      const result = await adapter.schedulePower("sleep", "8:30");
       expect(result.success).toBe(true);
-      expect(result.message).toContain("23:00 WIB");
+      expect(result.message).toContain("08:30 WIB");
       expect(mockExec).toHaveBeenCalledWith(expect.stringContaining('schtasks /create /tn "WemoteIt_ScheduledSleep"'));
-      expect(mockExec).toHaveBeenCalledWith(expect.stringContaining("/st 23:00"));
+      expect(mockExec).toHaveBeenCalledWith(expect.stringContaining("/st 08:30"));
+    });
+
+    it("should cancel active scheduled sleep task", async () => {
+      mockExec.mockResolvedValueOnce({ stdout: "SUCCESS", stderr: "" });
+
+      const result = await adapter.schedulePower("cancel_sleep");
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Jadwal Sleep Dibatalkan");
+      expect(mockExec).toHaveBeenCalledWith(expect.stringContaining('schtasks /delete /tn "WemoteIt_ScheduledSleep" /f'));
     });
 
     it("should execute instant sleep when no time is provided", async () => {
@@ -133,6 +149,18 @@ describe("Phase 10: Windows OS Automation Provider & Media Delivery", () => {
       expect(result.success).toBe(true);
       expect(result.message).toContain("Layar Windows telah dikunci");
       expect(mockExec).toHaveBeenCalledWith(expect.stringContaining("LockWorkStation"));
+    });
+  });
+
+  describe("Desktop Screen Capture (captureScreen)", () => {
+    it("should execute desktop screenshot capture and return path", async () => {
+      mockExec.mockResolvedValueOnce({ stdout: "", stderr: "" });
+
+      const res = await adapter.captureScreen();
+      expect(res.success).toBe(true);
+      expect(res.filePath).toBeDefined();
+      expect(res.filePath).toContain(".png");
+      expect(mockExec).toHaveBeenCalledWith(expect.stringContaining("System.Drawing.Bitmap"));
     });
   });
 
