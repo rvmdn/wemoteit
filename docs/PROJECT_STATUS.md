@@ -1,6 +1,6 @@
 # Project Status: wemoteit (WhatsApp AI Agent Orchestrator)
 
-## Current Status: Phase 4 Completed / Phase 5 Ready
+## Current Status: Phase 5 Completed / Phase 6 Ready
 
 | Phase | Description | Status | Evidence / Notes |
 |---|---|---|---|
@@ -9,23 +9,19 @@
 | **Phase 2** | WhatsApp Listener Proof of Concept | **Completed** | Implemented `WhatsAppWebAdapter` with Playwright (Microsoft Edge/Chrome system channel). Session profile persistence in `sessionDataDir`. QR scan detection state machine (`uninitialized`, `launching`, `needs_qr_login`, `authenticated`, `listening`). DOM MutationObserver for incoming message detection with startup historical-message exclusion and deduplication. CLI commands `login-whatsapp` and `start-whatsapp`. **26/26 automated tests passing.** |
 | **Phase 3** | Command Pipeline & Authorization | **Completed** | Implemented full closed-vocabulary command parser (`/help`, `/status`, `/repos`, `/jobs`, `/job <id>`, `/review`, `/run`, `/approve`, `/cancel`), approval token gating with 15-min TTL, persistent `pending_approvals` table (`migrations/002_approvals.sql`), path traversal protection (`../`, `..\`), granular audit trail for every pipeline transition. **35/35 automated tests passing.** |
 | **Phase 4** | Antigravity Integration Adapter | **Completed** | Discovered and verified local Antigravity IDE 1.107.0 CLI binary (`C:\Users\822117\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd`). Implemented `AntigravityExecutionProvider` supporting `chat --reuse-window --mode agent/ask`, safe child process spawning, non-blocking asynchronous execution handles, timeout safeguards (killing process on expiry), process cancellation, and secret redaction. Config updated in `config/agents.yaml`. **39/39 automated tests passing.** |
-| **Phase 5** | End-to-End Orchestration & Result Delivery | **Ready to Implement** | Integration between live input channel, authorization, execution provider, and output delivery. |
-| **Phase 6** | Hardening & Production Operations | Pending | Blocked on prior phases. |
+| **Phase 5** | End-to-End Orchestration & Result Delivery | **Completed** | Implemented full correlation tracking across every stage (Message ➔ Command ➔ Job ➔ Result ➔ Delivery Attempt ➔ Audit Event). Separated delivery failure state from job execution outcomes (failed WhatsApp replies do not rerun underlying jobs; independent retry mechanism provided). Added `wemoteit trace <correlationId>` CLI command. **41/41 automated tests passing.** |
+| **Phase 6** | Hardening & Production Operations | **Ready to Implement** | Security regression suites, operator runbook, clean shutdown handling. |
 
 ---
 
-## Phase 4 Implementation Summary
+## Phase 5 Implementation Summary
 
-1. **Antigravity CLI Discovery & Verification**:
-   - Verified that Antigravity IDE 1.107.0 is active on Windows with workspace context.
-   - Authoritative CLI binary located at `C:\Users\822117\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd`.
-   - Verified CLI subcommand: `antigravity-ide.cmd chat --reuse-window --mode agent <prompt>`.
-2. **Adapter Implementation**: [`AntigravityExecutionProvider`](file:///F:/Project/Desktop/wemoteit/src/adapters/agents/antigravity/antigravity-execution.provider.ts)
-   - Discovers CLI binary dynamically with fallbacks.
-   - Spawns subprocess with argument arrays (no unsafe shell string concatenation).
-   - Mode resolution: sets mode to `ask` for read-only reviews and `agent` for mutating tasks.
-   - Target context: sets `cwd` to target repository root.
-   - Process supervision: tracks child PID, captures bounded stdout/stderr buffers, enforces execution timeout, and supports graceful cancellation via `requestCancellation(handle)`.
-   - Normalizes process exit codes into `ExecutionResult` with automated secret masking.
+1. **End-to-End Correlation Tracking**:
+   - Single, unforgeable `correlationId` assigned at message ingestion and preserved across `NormalizedIncomingMessage`, `Command`, `Job`, `ExecutionResult`, `DeliveryAttempt`, and `AuditEvent`.
+   - Added CLI command: `npm run cli -- trace <correlationId>` displaying the complete chronological lifecycle report.
+2. **Delivery Failure Separation**:
+   - Delivery attempts are modeled as durable entities ([`DeliveryAttempt`](file:///F:/Project/Desktop/wemoteit/src/domain/delivery/delivery.entity.ts)) persisted to SQLite.
+   - If WhatsApp reply delivery fails (e.g. transient network outage or tab detachment), the underlying Job **remains strictly in `completed` state**.
+   - `ResultDeliveryService.retryFailedDelivery()` provides independent retry capabilities with incremented attempt counters without re-invoking the execution agent.
 3. **Automated Testing**:
-   - 39 tests passing across 10 test suites in Vitest.
+   - 41 automated tests passing across 11 test suites in Vitest.

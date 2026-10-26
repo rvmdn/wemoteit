@@ -25,6 +25,8 @@ import {
   AuditEventSchema,
   PendingApproval,
   PendingApprovalSchema,
+  DeliveryAttempt,
+  DeliveryAttemptSchema,
 } from "../../../domain/index.js";
 
 export class SqlitePersistenceRepository implements PersistencePort {
@@ -670,6 +672,76 @@ export class SqlitePersistenceRepository implements PersistencePort {
         expiresAt: row.expires_at,
         status: row.status,
         createdAt: row.created_at,
+      })
+    );
+  }
+
+  // Delivery Attempts
+  public async recordDeliveryAttempt(attempt: DeliveryAttempt): Promise<void> {
+    const validated = DeliveryAttemptSchema.parse(attempt);
+    const db = this.dbHelper.getRawDb();
+    db.prepare(`
+      INSERT INTO delivery_attempts (
+        id, job_id, channel_connection_id, conversation_id,
+        status, error_message, attempt, delivered_at, correlation_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status,
+        error_message = excluded.error_message,
+        attempt = excluded.attempt,
+        delivered_at = excluded.delivered_at
+    `).run(
+      validated.id,
+      validated.jobId,
+      validated.channelConnectionId,
+      validated.conversationId,
+      validated.status,
+      validated.errorMessage,
+      validated.attempt,
+      validated.deliveredAt,
+      validated.correlationId
+    );
+  }
+
+  public async listDeliveryAttempts(jobId?: string): Promise<DeliveryAttempt[]> {
+    const db = this.dbHelper.getRawDb();
+    let rows: any[];
+    if (jobId) {
+      rows = db.prepare("SELECT * FROM delivery_attempts WHERE job_id = ? ORDER BY attempt ASC").all(jobId);
+    } else {
+      rows = db.prepare("SELECT * FROM delivery_attempts ORDER BY rowid DESC LIMIT 50").all();
+    }
+    return rows.map((r) =>
+      DeliveryAttemptSchema.parse({
+        id: r.id,
+        jobId: r.job_id,
+        channelConnectionId: r.channel_connection_id,
+        conversationId: r.conversation_id,
+        status: r.status,
+        errorMessage: r.error_message,
+        attempt: r.attempt,
+        deliveredAt: r.delivered_at,
+        correlationId: r.correlation_id,
+      })
+    );
+  }
+
+  public async listFailedDeliveries(): Promise<DeliveryAttempt[]> {
+    const db = this.dbHelper.getRawDb();
+    const rows = db.prepare(
+      "SELECT * FROM delivery_attempts WHERE status = 'failed' ORDER BY rowid DESC LIMIT 50"
+    ).all() as any[];
+    return rows.map((r) =>
+      DeliveryAttemptSchema.parse({
+        id: r.id,
+        jobId: r.job_id,
+        channelConnectionId: r.channel_connection_id,
+        conversationId: r.conversation_id,
+        status: r.status,
+        errorMessage: r.error_message,
+        attempt: r.attempt,
+        deliveredAt: r.delivered_at,
+        correlationId: r.correlation_id,
       })
     );
   }

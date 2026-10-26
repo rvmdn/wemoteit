@@ -297,7 +297,7 @@ program
 
       const authorizer = new CommandAuthorizer(configService);
       const coordinator = new ExecutionCoordinator(jobManager, persistence, providerRegistry);
-      const delivery = new ResultDeliveryService(adapter);
+      const delivery = new ResultDeliveryService(adapter, persistence);
 
       const router = new CommandRouter(
         persistence,
@@ -330,6 +330,56 @@ program
       });
     } catch (err: any) {
       console.error("WhatsApp orchestrator error:", err.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("trace <correlationId>")
+  .description("Trace the full end-to-end lifecycle of a request by its correlation ID")
+  .action(async (correlationId) => {
+    try {
+      const configService = new ConfigService();
+      const config = configService.getConfig();
+      const dbHelper = new SqliteDatabase(config.policies.databasePath);
+      dbHelper.migrate();
+      const persistence = new SqlitePersistenceRepository(dbHelper);
+
+      const auditEvents = await persistence.listAuditEvents(correlationId);
+      const deliveryAttempts = await persistence.listDeliveryAttempts();
+      const matchingDeliveries = deliveryAttempts.filter((d) => d.correlationId === correlationId);
+
+      console.log("\n=======================================================");
+      console.log(`     TRACE REPORT: ${correlationId}                    `);
+      console.log("=======================================================");
+
+      if (auditEvents.length === 0 && matchingDeliveries.length === 0) {
+        console.log("No recorded events found for this correlation ID.");
+      } else {
+        console.log("TIMELINE OF EVENTS:");
+        for (const ev of auditEvents) {
+          console.log(`  [${ev.occurredAt}] [${ev.eventType.toUpperCase()}] -> ${ev.outcome}`);
+          if (ev.reasonCode) console.log(`    Reason: ${ev.reasonCode}`);
+          if (ev.details && Object.keys(ev.details).length > 0) {
+            console.log(`    Details: ${JSON.stringify(ev.details)}`);
+          }
+        }
+
+        if (matchingDeliveries.length > 0) {
+          console.log("\nDELIVERY ATTEMPTS:");
+          for (const d of matchingDeliveries) {
+            console.log(
+              `  [${d.deliveredAt || "PENDING"}] Status: ${d.status.toUpperCase()} (Attempt #${d.attempt})`
+            );
+            if (d.errorMessage) console.log(`    Error: ${d.errorMessage}`);
+          }
+        }
+      }
+      console.log("=======================================================\n");
+
+      dbHelper.close();
+    } catch (err: any) {
+      console.error("Trace failed:", err.message);
       process.exit(1);
     }
   });

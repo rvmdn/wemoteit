@@ -8,3 +8,4 @@ export * from "./job/job.entity.js";
 export * from "./result/result.entity.js";
 export * from "./audit/audit.entity.js";
 export * from "./approval/approval.entity.js";
+export * from "./delivery/delivery.entity.js";
