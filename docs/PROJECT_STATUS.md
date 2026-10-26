@@ -1,6 +1,6 @@
 # Project Status: wemoteit (WhatsApp AI Agent Orchestrator)
 
-## Current Status: Phase 5 Completed / Phase 6 Ready
+## Current Status: Phase 6 Completed & Accepted (All Phases Complete)
 
 | Phase | Description | Status | Evidence / Notes |
 |---|---|---|---|
@@ -10,18 +10,30 @@
 | **Phase 3** | Command Pipeline & Authorization | **Completed** | Implemented full closed-vocabulary command parser (`/help`, `/status`, `/repos`, `/jobs`, `/job <id>`, `/review`, `/run`, `/approve`, `/cancel`), approval token gating with 15-min TTL, persistent `pending_approvals` table (`migrations/002_approvals.sql`), path traversal protection (`../`, `..\`), granular audit trail for every pipeline transition. **35/35 automated tests passing.** |
 | **Phase 4** | Antigravity Integration Adapter | **Completed** | Discovered and verified local Antigravity IDE 1.107.0 CLI binary (`C:\Users\822117\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd`). Implemented `AntigravityExecutionProvider` supporting `chat --reuse-window --mode agent/ask`, safe child process spawning, non-blocking asynchronous execution handles, timeout safeguards (killing process on expiry), process cancellation, and secret redaction. Config updated in `config/agents.yaml`. **39/39 automated tests passing.** |
 | **Phase 5** | End-to-End Orchestration & Result Delivery | **Completed** | Implemented full correlation tracking across every stage (Message ➔ Command ➔ Job ➔ Result ➔ Delivery Attempt ➔ Audit Event). Separated delivery failure state from job execution outcomes (failed WhatsApp replies do not rerun underlying jobs; independent retry mechanism provided). Added `wemoteit trace <correlationId>` CLI command. **41/41 automated tests passing.** |
-| **Phase 6** | Hardening & Production Operations | **Ready to Implement** | Security regression suites, operator runbook, clean shutdown handling. |
+| **Phase 6** | Hardening & Production Operations | **Completed** | Implemented unified graceful lifecycle management ([`LifecycleManager`](file:///F:/Project/Desktop/wemoteit/src/app/lifecycle.ts) and [`bootstrap.ts`](file:///F:/Project/Desktop/wemoteit/src/app/bootstrap.ts)), comprehensive security regression test suite ([`tests/security/security-regression.test.ts`](file:///F:/Project/Desktop/wemoteit/tests/security/security-regression.test.ts)), detailed operations runbook ([`docs/OPERATIONS.md`](file:///F:/Project/Desktop/wemoteit/docs/OPERATIONS.md)), and user-facing documentation ([`README.md`](file:///F:/Project/Desktop/wemoteit/README.md)). **46/46 automated tests passing across 12 test suites.** |
 
 ---
 
-## Phase 5 Implementation Summary
+## Phase 6 Implementation Summary
 
-1. **End-to-End Correlation Tracking**:
-   - Single, unforgeable `correlationId` assigned at message ingestion and preserved across `NormalizedIncomingMessage`, `Command`, `Job`, `ExecutionResult`, `DeliveryAttempt`, and `AuditEvent`.
-   - Added CLI command: `npm run cli -- trace <correlationId>` displaying the complete chronological lifecycle report.
-2. **Delivery Failure Separation**:
-   - Delivery attempts are modeled as durable entities ([`DeliveryAttempt`](file:///F:/Project/Desktop/wemoteit/src/domain/delivery/delivery.entity.ts)) persisted to SQLite.
-   - If WhatsApp reply delivery fails (e.g. transient network outage or tab detachment), the underlying Job **remains strictly in `completed` state**.
-   - `ResultDeliveryService.retryFailedDelivery()` provides independent retry capabilities with incremented attempt counters without re-invoking the execution agent.
-3. **Automated Testing**:
-   - 41 automated tests passing across 11 test suites in Vitest.
+1. **Graceful Lifecycle Management**:
+   - [`LifecycleManager`](file:///F:/Project/Desktop/wemoteit/src/app/lifecycle.ts) coordinates graceful teardown upon receiving `SIGINT` / `SIGTERM` or uncaught exceptions.
+   - Ensures in-flight WhatsApp messages are flushed, active Playwright browser contexts are closed cleanly to avoid corrupting `./data/whatsapp_session`, and SQLite databases are safely synchronized and checkpointed.
+   - Application entrypoint in [`src/app/bootstrap.ts`](file:///F:/Project/Desktop/wemoteit/src/app/bootstrap.ts).
+
+2. **Security Regression Suite**:
+   - Comprehensive test suite in [`tests/security/security-regression.test.ts`](file:///F:/Project/Desktop/wemoteit/tests/security/security-regression.test.ts) validating:
+     - Arbitrary shell command blocking (`powershell -Command ...` rejected with zero jobs created).
+     - Directory path traversal attacks blocked (`../../../../Windows/System32` rejected with zero jobs created).
+     - System prompt override injection blocked (injections treated as literal arguments with closed vocabulary).
+     - Payload DoS prevention (messages > 4096 characters rejected before allocation/parsing).
+     - Sensitive credential redaction (raw API keys and tokens masked with `[REDACTED]`).
+     - Sender authorization & phone number spoofing rejection (unauthorized numbers denied with audit trail).
+
+3. **Operations & Production Runbook**:
+   - Comprehensive operator runbook in [`docs/OPERATIONS.md`](file:///F:/Project/Desktop/wemoteit/docs/OPERATIONS.md) covering deployment prerequisites, QR code login, daemon configuration with PM2/Windows Task Scheduler, troubleshooting guides, health inspection, and backup/restore procedures.
+   - User-facing [`README.md`](file:///F:/Project/Desktop/wemoteit/README.md) with quick start guide and command reference.
+
+4. **Automated Testing**:
+   - **46 automated tests passing across 12 test suites in Vitest.**
+
