@@ -6,12 +6,15 @@ import { SqlitePersistenceRepository } from "../../src/adapters/persistence/sqli
 import { WhatsAppWebAdapter } from "../../src/adapters/channels/whatsapp/whatsapp-web.adapter.js";
 import { JobManager } from "../../src/application/jobs/job-manager.js";
 
+import { GeminiAccountPoolManager } from "../../src/adapters/agents/gemini/gemini-account-pool.js";
+
 describe("Web Management Dashboard & Account Security Gate", () => {
   let dbHelper: SqliteDatabase;
   let persistence: SqlitePersistenceRepository;
   let configService: ConfigService;
   let whatsappAdapter: WhatsAppWebAdapter;
   let jobManager: JobManager;
+  let geminiPoolManager: GeminiAccountPoolManager;
   let dashboardServer: DashboardWebServer;
   let port: number;
 
@@ -21,6 +24,7 @@ describe("Web Management Dashboard & Account Security Gate", () => {
     dbHelper.migrate();
     persistence = new SqlitePersistenceRepository(dbHelper);
     jobManager = new JobManager(persistence);
+    geminiPoolManager = new GeminiAccountPoolManager(persistence);
 
     whatsappAdapter = new WhatsAppWebAdapter({
       workspaceId: "ws-test",
@@ -40,6 +44,7 @@ describe("Web Management Dashboard & Account Security Gate", () => {
       persistence,
       whatsappAdapter,
       jobManager,
+      geminiPoolManager,
     });
 
     await dashboardServer.start();
@@ -151,6 +156,50 @@ describe("Web Management Dashboard & Account Security Gate", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.success).toBe(true);
+  });
+
+  it("handles Gemini accounts listing and registration via /api/gemini/accounts", async () => {
+    // 1. Initial list should be empty
+    const listRes = await fetch(`http://localhost:${port}/api/gemini/accounts`);
+    expect(listRes.status).toBe(200);
+    const listData = await listRes.json();
+    expect(listData.accounts.length).toBe(0);
+    expect(listData.stats.totalAccounts).toBe(0);
+
+    // 2. Add an account
+    const addRes = await fetch(`http://localhost:${port}/api/gemini/accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "test-acc-1",
+        label: "Google Account 1 (Primary)",
+        apiKey: "AIzaSyTestApiKeyForTesting123456",
+        priority: 1,
+      }),
+    });
+    expect(addRes.status).toBe(200);
+    const addData = await addRes.json();
+    expect(addData.success).toBe(true);
+    expect(addData.accountId).toBe("test-acc-1");
+
+    // 3. Verify it shows in list and API key is masked
+    const updatedRes = await fetch(`http://localhost:${port}/api/gemini/accounts`);
+    const updatedData = await updatedRes.json();
+    expect(updatedData.accounts.length).toBe(1);
+    expect(updatedData.accounts[0].label).toBe("Google Account 1 (Primary)");
+    expect(updatedData.accounts[0].maskedKey).toContain("..."); // Masked!
+    expect(updatedData.accounts[0].apiKey).toBeUndefined(); // Zero secret leakage!
+
+    // 4. Delete account
+    const delRes = await fetch(`http://localhost:${port}/api/gemini/accounts?id=test-acc-1`, {
+      method: "DELETE",
+    });
+    expect(delRes.status).toBe(200);
+
+    // 5. Verify deleted
+    const finalRes = await fetch(`http://localhost:${port}/api/gemini/accounts`);
+    const finalData = await finalRes.json();
+    expect(finalData.accounts.length).toBe(0);
   });
 
   it("returns 404 for non-existent API routes", async () => {

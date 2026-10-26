@@ -27,6 +27,9 @@ import {
   PendingApprovalSchema,
   DeliveryAttempt,
   DeliveryAttemptSchema,
+  GeminiAccountInstance,
+  GeminiAccountInstanceSchema,
+  GeminiAccountStatus,
 } from "../../../domain/index.js";
 
 export class SqlitePersistenceRepository implements PersistencePort {
@@ -767,6 +770,98 @@ export class SqlitePersistenceRepository implements PersistencePort {
       createdAt: row.created_at,
       startedAt: row.started_at,
       completedAt: row.completed_at,
+      updatedAt: row.updated_at,
+    });
+  }
+
+  // Gemini Multi-Account Pool
+  public async saveGeminiAccount(account: GeminiAccountInstance): Promise<void> {
+    const validated = GeminiAccountInstanceSchema.parse(account);
+    const db = this.dbHelper.getRawDb();
+    db.prepare(`
+      INSERT INTO gemini_accounts (
+        id, label, api_key, model, tier, status, priority,
+        requests_today, cooldown_until, last_used_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        label = excluded.label,
+        api_key = excluded.api_key,
+        model = excluded.model,
+        tier = excluded.tier,
+        status = excluded.status,
+        priority = excluded.priority,
+        requests_today = excluded.requests_today,
+        cooldown_until = excluded.cooldown_until,
+        last_used_at = excluded.last_used_at,
+        updated_at = excluded.updated_at
+    `).run(
+      validated.id,
+      validated.label,
+      validated.apiKey,
+      validated.model,
+      validated.tier,
+      validated.status,
+      validated.priority,
+      validated.requestsToday,
+      validated.cooldownUntil,
+      validated.lastUsedAt,
+      validated.createdAt,
+      validated.updatedAt
+    );
+  }
+
+  public async getGeminiAccount(id: string): Promise<GeminiAccountInstance | null> {
+    const db = this.dbHelper.getRawDb();
+    const row = db.prepare("SELECT * FROM gemini_accounts WHERE id = ?").get(id) as any;
+    if (!row) return null;
+    return this.mapGeminiAccountRow(row);
+  }
+
+  public async listGeminiAccounts(): Promise<GeminiAccountInstance[]> {
+    const db = this.dbHelper.getRawDb();
+    const rows = db.prepare("SELECT * FROM gemini_accounts ORDER BY priority ASC, rowid ASC").all() as any[];
+    return rows.map((r) => this.mapGeminiAccountRow(r));
+  }
+
+  public async updateGeminiAccountStatus(
+    id: string,
+    status: GeminiAccountStatus,
+    cooldownUntil: string | null = null
+  ): Promise<void> {
+    const db = this.dbHelper.getRawDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      "UPDATE gemini_accounts SET status = ?, cooldown_until = ?, updated_at = ? WHERE id = ?"
+    ).run(status, cooldownUntil, now, id);
+  }
+
+  public async incrementGeminiAccountUsage(id: string): Promise<void> {
+    const db = this.dbHelper.getRawDb();
+    const now = new Date().toISOString();
+    db.prepare(
+      "UPDATE gemini_accounts SET requests_today = requests_today + 1, last_used_at = ?, updated_at = ? WHERE id = ?"
+    ).run(now, now, id);
+  }
+
+  public async deleteGeminiAccount(id: string): Promise<void> {
+    const db = this.dbHelper.getRawDb();
+    db.prepare("DELETE FROM gemini_accounts WHERE id = ?").run(id);
+  }
+
+  private mapGeminiAccountRow(row: any): GeminiAccountInstance {
+    return GeminiAccountInstanceSchema.parse({
+      id: row.id,
+      schemaVersion: 1,
+      label: row.label,
+      apiKey: row.api_key,
+      model: row.model,
+      tier: row.tier,
+      status: row.status,
+      priority: row.priority,
+      requestsToday: row.requests_today,
+      cooldownUntil: row.cooldown_until,
+      lastUsedAt: row.last_used_at,
+      createdAt: row.created_at,
       updatedAt: row.updated_at,
     });
   }

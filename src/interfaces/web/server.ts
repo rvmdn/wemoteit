@@ -9,6 +9,7 @@ import { WhatsAppWebAdapter } from "../../adapters/channels/whatsapp/whatsapp-we
 import { JobManager } from "../../application/jobs/job-manager.js";
 import { CommandRouter } from "../../application/routing/command-router.js";
 import { MessageNormalizer } from "../../application/normalization/message-normalizer.js";
+import { GeminiAccountPoolManager } from "../../adapters/agents/gemini/gemini-account-pool.js";
 import { logger } from "../../adapters/logging/logger.js";
 
 export interface DashboardServerOptions {
@@ -18,6 +19,7 @@ export interface DashboardServerOptions {
   whatsappAdapter: WhatsAppWebAdapter;
   jobManager: JobManager;
   commandRouter?: CommandRouter;
+  geminiPoolManager?: GeminiAccountPoolManager;
 }
 
 export class DashboardWebServer {
@@ -436,6 +438,103 @@ export class DashboardWebServer {
         });
       } else {
         this.json(res, 501, { error: "CommandRouter not available" });
+      }
+      return;
+    }
+
+    // GET /api/gemini/accounts
+    if (req.method === "GET" && pathname === "/api/gemini/accounts") {
+      if (this.options.geminiPoolManager) {
+        const accounts = await this.options.geminiPoolManager.listMaskedAccounts();
+        const stats = await this.options.geminiPoolManager.getStats();
+        this.json(res, 200, { accounts, stats });
+      } else {
+        const accounts = await this.options.persistence.listGeminiAccounts();
+        this.json(res, 200, { accounts, stats: { totalAccounts: accounts.length, activeAccounts: accounts.length } });
+      }
+      return;
+    }
+
+    // POST /api/gemini/accounts
+    if (req.method === "POST" && pathname === "/api/gemini/accounts") {
+      const body = await this.readJsonBody(req);
+      const id = String(body.id || `inst-${Date.now()}`).trim();
+      const label = String(body.label || "Google Account").trim();
+      const apiKey = String(body.apiKey || "").trim();
+      const model = String(body.model || "gemini-1.5-pro").trim();
+      const tier = body.tier === "payg" ? "payg" : "free";
+      const priority = Number(body.priority) || 1;
+
+      if (!apiKey) {
+        this.json(res, 400, { error: "API Key is required" });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      await this.options.persistence.saveGeminiAccount({
+        id,
+        schemaVersion: 1,
+        label,
+        apiKey,
+        model,
+        tier,
+        status: "active",
+        priority,
+        requestsToday: 0,
+        cooldownUntil: null,
+        lastUsedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      this.json(res, 200, { success: true, message: `Account '${label}' saved to pool`, accountId: id });
+      return;
+    }
+
+    // DELETE /api/gemini/accounts
+    if (req.method === "DELETE" && pathname === "/api/gemini/accounts") {
+      const id = parsedUrl.searchParams.get("id");
+      if (!id) {
+        this.json(res, 400, { error: "Account ID is required" });
+        return;
+      }
+      await this.options.persistence.deleteGeminiAccount(id);
+      this.json(res, 200, { success: true, message: `Account '${id}' removed from pool` });
+      return;
+    }
+
+    // POST /api/gemini/test
+    if (req.method === "POST" && pathname === "/api/gemini/test") {
+      const body = await this.readJsonBody(req);
+      const apiKey = String(body.apiKey || "").trim();
+      const model = String(body.model || "gemini-1.5-pro").trim();
+
+      if (!apiKey) {
+        this.json(res, 400, { error: "API key is required" });
+        return;
+      }
+
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "Ping test: respond with 'PONG: Gemini is ready'" }] }],
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          this.json(res, 400, { success: false, error: `HTTP ${response.status}: ${errText}` });
+          return;
+        }
+
+        const data: any = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "OK";
+        this.json(res, 200, { success: true, answer: text.trim() });
+      } catch (err: any) {
+        this.json(res, 500, { success: false, error: err.message });
       }
       return;
     }

@@ -4,6 +4,7 @@ export * from "./message/message.entity.js";
 export * from "./command/command.entity.js";
 export * from "./repository/repository.entity.js";
 export * from "./agent/agent.entity.js";
+export * from "./agent/gemini-account.entity.js";
 export * from "./job/job.entity.js";
 export * from "./result/result.entity.js";
 export * from "./audit/audit.entity.js";

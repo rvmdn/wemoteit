@@ -13,6 +13,8 @@ import {
   JobStatus,
   PendingApproval,
   DeliveryAttempt,
+  GeminiAccountInstance,
+  GeminiAccountStatus,
 } from "../domain/index.js";
 
 export interface PersistencePort {
@@ -76,4 +78,16 @@ export interface PersistencePort {
   recordDeliveryAttempt(attempt: DeliveryAttempt): Promise<void>;
   listDeliveryAttempts(jobId?: string): Promise<DeliveryAttempt[]>;
   listFailedDeliveries(): Promise<DeliveryAttempt[]>;
+
+  // Gemini Multi-Account Pool
+  saveGeminiAccount(account: GeminiAccountInstance): Promise<void>;
+  getGeminiAccount(id: string): Promise<GeminiAccountInstance | null>;
+  listGeminiAccounts(): Promise<GeminiAccountInstance[]>;
+  updateGeminiAccountStatus(
+    id: string,
+    status: GeminiAccountStatus,
+    cooldownUntil?: string | null
+  ): Promise<void>;
+  incrementGeminiAccountUsage(id: string): Promise<void>;
+  deleteGeminiAccount(id: string): Promise<void>;
 }
