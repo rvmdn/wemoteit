@@ -1,7 +1,8 @@
 agents:
   antigravity:
-    enabled: false
-    executionMode: mock
+    enabled: true
+    executionMode: cli
+    cliPath: C:\Users\822117\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd
     maxTimeoutMs: 120000
   mock:
     enabled: true

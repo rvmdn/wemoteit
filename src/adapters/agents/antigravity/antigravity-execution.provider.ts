@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { spawn, ChildProcess } from "node:child_process";
 import {
   ExecutionProvider,
   ExecutionCapabilities,
@@ -7,78 +10,311 @@ import {
   ExecutionStatus,
   CancellationResult,
 } from "../../../ports/execution-provider.port.js";
+import { ExecutionResult } from "../../../domain/result/result.entity.js";
 import { ProviderError } from "../../../shared/errors/app-error.js";
 import { logger } from "../../logging/logger.js";
+import { redactSecrets } from "../../../shared/security/redactor.js";
 
-/**
- * AntigravityExecutionProvider
- *
- * NOTE: Marked as PENDING VALIDATION in Phase 0/1.
- * This adapter manages communication with Google Antigravity via verified
- * mechanisms (CLI `agy` or local Python SDK `google-antigravity`).
- */
+export interface AntigravityProviderConfig {
+  cliPath?: string;
+  maxTimeoutMs?: number;
+  executionMode?: "cli" | "sdk" | "ui_automation" | "mock";
+}
+
+interface ActiveProcessState {
+  process?: ChildProcess;
+  status: ExecutionStatus;
+  startedAt: string;
+  stdout: string;
+  stderr: string;
+  request: ExecutionRequest;
+}
+
 export class AntigravityExecutionProvider implements ExecutionProvider {
   public readonly provider = "antigravity";
-  private isVerified = false;
+  private activeJobs = new Map<string, ActiveProcessState>();
 
-  constructor(
-    private readonly config: {
-      cliPath?: string;
-      maxTimeoutMs?: number;
-      executionMode?: "cli" | "sdk" | "ui_automation" | "mock";
-    } = {}
-  ) {}
+  constructor(private readonly config: AntigravityProviderConfig = {}) {}
 
   public async getCapabilities(): Promise<ExecutionCapabilities> {
     return {
-      supportsStreaming: false,
+      supportsStreaming: true,
       supportsCancellation: true,
-      supportedLanguages: ["typescript", "javascript", "python", "html", "css", "csharp", "sql"],
-      supportedTools: ["read_file", "write_to_file", "run_command", "view_file"],
+      supportedLanguages: [
+        "typescript",
+        "javascript",
+        "csharp",
+        "python",
+        "sql",
+        "html",
+        "css",
+        "markdown",
+      ],
+      supportedTools: ["read_file", "write_to_file", "run_command", "view_file", "search"],
       maxTimeoutMs: this.config.maxTimeoutMs ?? 120000,
     };
+  }
+
+  public resolveCliPath(): string {
+    if (this.config.cliPath) {
+      if (fs.existsSync(this.config.cliPath)) {
+        return this.config.cliPath;
+      }
+      throw new ProviderError(
+        `Configured Antigravity CLI path does not exist: ${this.config.cliPath}`,
+        this.provider
+      );
+    }
+
+    // Default standard Windows install paths for Antigravity IDE
+    const localAppData = process.env.LOCALAPPDATA || "C:\\Users\\822117\\AppData\\Local";
+    const candidates = [
+      path.join(localAppData, "Programs", "Antigravity IDE", "bin", "antigravity-ide.cmd"),
+      path.join(localAppData, "Programs", "Antigravity IDE", "Antigravity IDE.exe"),
+      "C:\\Program Files\\Antigravity IDE\\bin\\antigravity-ide.cmd",
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new ProviderError(
+      "Antigravity IDE CLI executable was not found. Please verify installation at 'Antigravity IDE/bin/antigravity-ide.cmd'",
+      this.provider,
+      { checkedPaths: candidates }
+    );
   }
 
   public async execute(
     request: ExecutionRequest,
     context: ExecutionContext
   ): Promise<ExecutionHandle> {
-    if (!this.isVerified) {
-      logger.warn(
-        { jobId: request.jobId, provider: this.provider },
-        "Antigravity adapter invoked while pending environment validation. Operating under pending validation protocol."
-      );
-      throw new ProviderError(
-        "Antigravity adapter requires host validation before executing real tasks. Please verify CLI/SDK installation or use mock provider.",
-        this.provider
-      );
+    const handleId = `agy-${request.jobId}-${Date.now()}`;
+    const startedAt = new Date().toISOString();
+    const handle: ExecutionHandle = {
+      id: handleId,
+      provider: this.provider,
+      startedAt,
+    };
+
+    const targetCwd = context.workingDirectory || request.repositoryPath || process.cwd();
+    const timeoutMs = request.timeoutMs || this.config.maxTimeoutMs || 120000;
+
+    let cliPath: string;
+    try {
+      cliPath = this.resolveCliPath();
+    } catch (err: any) {
+      const errorResult: ExecutionResult = {
+        id: `res-${handleId}`,
+        schemaVersion: 1,
+        jobId: request.jobId,
+        status: "failure",
+        summary: `Antigravity CLI discovery failed: ${err.message}`,
+        outputRef: null,
+        artifacts: [],
+        startedAt,
+        completedAt: new Date().toISOString(),
+        durationMs: 0,
+        errorCode: "CLI_NOT_FOUND",
+        correlationId: request.correlationId,
+      };
+
+      this.activeJobs.set(handleId, {
+        status: {
+          handleId,
+          state: "failed",
+          progressSummary: "CLI binary not found",
+          result: errorResult,
+        },
+        startedAt,
+        stdout: "",
+        stderr: err.message,
+        request,
+      });
+
+      return handle;
     }
 
-    const handle: ExecutionHandle = {
-      id: `agy-${request.jobId}-${Date.now()}`,
-      provider: this.provider,
-      startedAt: new Date().toISOString(),
+    logger.info(
+      { jobId: request.jobId, cliPath, targetCwd, timeoutMs },
+      "Launching Antigravity agent process"
+    );
+
+    const mode = request.action === "review" ? "ask" : "agent";
+    const prompt = request.prompt;
+    const args = ["chat", "--reuse-window", "--mode", mode, prompt];
+
+    const child = spawn(cliPath, args, {
+      cwd: targetCwd,
+      env: {
+        ...process.env,
+        ...(context.environment || {}),
+      },
+      shell: true,
+      windowsHide: true,
+    });
+
+    const activeState: ActiveProcessState = {
+      process: child,
+      status: {
+        handleId,
+        state: "running",
+        progressSummary: `Executing mode '${mode}' on '${targetCwd}'`,
+      },
+      startedAt,
+      stdout: "",
+      stderr: "",
+      request,
     };
+    this.activeJobs.set(handleId, activeState);
+
+    // Timeout guard
+    const timer = setTimeout(() => {
+      if (activeState.status.state === "running") {
+        logger.warn({ jobId: request.jobId, handleId }, "Antigravity execution timed out; terminating");
+        child.kill("SIGTERM");
+        const completedAt = new Date().toISOString();
+        const durationMs = Date.now() - new Date(startedAt).getTime();
+
+        activeState.status = {
+          handleId,
+          state: "failed",
+          progressSummary: `Execution timed out after ${timeoutMs}ms`,
+          result: {
+            id: `res-${handleId}`,
+            schemaVersion: 1,
+            jobId: request.jobId,
+            status: "timeout",
+            summary: `Execution timed out after ${timeoutMs}ms.`,
+            outputRef: null,
+            artifacts: [],
+            startedAt,
+            completedAt,
+            durationMs,
+            errorCode: "EXECUTION_TIMEOUT",
+            correlationId: request.correlationId,
+          },
+        };
+      }
+    }, timeoutMs);
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (activeState.stdout.length < 50000) {
+        activeState.stdout += chunk.toString();
+      }
+    });
+
+    child.stderr?.on("data", (chunk: Buffer) => {
+      if (activeState.stderr.length < 50000) {
+        activeState.stderr += chunk.toString();
+      }
+    });
+
+    child.on("error", (err: Error) => {
+      clearTimeout(timer);
+      logger.error({ jobId: request.jobId, error: err.message }, "Antigravity child process error");
+      const completedAt = new Date().toISOString();
+      const durationMs = Date.now() - new Date(startedAt).getTime();
+
+      activeState.status = {
+        handleId,
+        state: "failed",
+        progressSummary: `Process error: ${err.message}`,
+        result: {
+          id: `res-${handleId}`,
+          schemaVersion: 1,
+          jobId: request.jobId,
+          status: "failure",
+          summary: `Failed to spawn process: ${err.message}`,
+          outputRef: null,
+          artifacts: [],
+          startedAt,
+          completedAt,
+          durationMs,
+          errorCode: "PROCESS_ERROR",
+          correlationId: request.correlationId,
+        },
+      };
+    });
+
+    child.on("close", (exitCode: number | null) => {
+      clearTimeout(timer);
+      if (activeState.status.state !== "running") return;
+
+      const completedAt = new Date().toISOString();
+      const durationMs = Date.now() - new Date(startedAt).getTime();
+      const isSuccess = exitCode === 0;
+
+      const rawSummary = isSuccess
+        ? activeState.stdout.trim() || `Antigravity agent completed task successfully in workspace ${targetCwd}.`
+        : activeState.stderr.trim() || `Antigravity agent exited with non-zero exit code: ${exitCode}`;
+
+      const safeSummary = redactSecrets(rawSummary.slice(0, 3000));
+
+      const result: ExecutionResult = {
+        id: `res-${handleId}`,
+        schemaVersion: 1,
+        jobId: request.jobId,
+        status: isSuccess ? "success" : "failure",
+        summary: safeSummary,
+        outputRef: null,
+        artifacts: [],
+        startedAt,
+        completedAt,
+        durationMs,
+        errorCode: isSuccess ? null : `EXIT_CODE_${exitCode}`,
+        correlationId: request.correlationId,
+      };
+
+      activeState.status = {
+        handleId,
+        state: isSuccess ? "completed" : "failed",
+        progressSummary: isSuccess ? "Task finished" : "Task failed",
+        result,
+      };
+
+      logger.info(
+        { jobId: request.jobId, exitCode, durationMs, success: isSuccess },
+        "Antigravity process finished"
+      );
+    });
 
     return handle;
   }
 
   public async getStatus(handle: ExecutionHandle): Promise<ExecutionStatus> {
-    return {
-      handleId: handle.id,
-      state: "failed",
-      progressSummary: "Antigravity provider integration pending verification.",
-    };
+    const state = this.activeJobs.get(handle.id);
+    if (!state) {
+      return {
+        handleId: handle.id,
+        state: "failed",
+        progressSummary: "Execution handle not found in active jobs registry",
+      };
+    }
+    return state.status;
   }
 
   public async requestCancellation(handle: ExecutionHandle): Promise<CancellationResult> {
-    return {
-      cancelled: false,
-      reason: "Antigravity provider integration pending verification.",
-    };
-  }
+    const state = this.activeJobs.get(handle.id);
+    if (!state) {
+      return { cancelled: false, reason: "Handle not found" };
+    }
 
-  public setVerified(verified: boolean): void {
-    this.isVerified = verified;
+    if (state.status.state !== "running") {
+      return { cancelled: false, reason: `Job already in ${state.status.state} state` };
+    }
+
+    try {
+      if (state.process && !state.process.killed) {
+        state.process.kill("SIGTERM");
+      }
+      state.status.state = "cancelled";
+      state.status.progressSummary = "Cancellation requested by operator";
+      return { cancelled: true };
+    } catch (err: any) {
+      return { cancelled: false, reason: err.message };
+    }
   }
 }
