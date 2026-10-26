@@ -103,4 +103,27 @@ describe("Command Authorizer", () => {
     expect(res.command?.commandType).toBe("approve_task");
     expect(res.command?.arguments.token).toBe("APP-99A1");
   });
+
+  it("routes WhatsApp messages to antigravity agent when enabled", () => {
+    const waMsg: NormalizedIncomingMessage = {
+      ...baseMessage,
+      sourceType: "whatsapp",
+      senderId: "self",
+      conversationId: "self",
+      text: "/review wedocit check structure",
+    };
+    const res = authorizer.authorizeAndParse(waMsg);
+    expect(res.decision).toBe("allow");
+    expect(res.command?.targetAgentProfileId).toBe("antigravity");
+  });
+
+  it("supports explicit --agent flag override", () => {
+    const msg = {
+      ...baseMessage,
+      text: "/review wedocit check structure --agent=mock",
+    };
+    const res = authorizer.authorizeAndParse(msg);
+    expect(res.decision).toBe("allow");
+    expect(res.command?.targetAgentProfileId).toBe("mock");
+  });
 });

@@ -2,7 +2,7 @@ agents:
   antigravity:
     enabled: true
     executionMode: cli
-    cliPath: C:\Users\822117\AppData\Local\Programs\Antigravity IDE\bin\antigravity-ide.cmd
+    cliPath: C:\Users\822117\AppData\Local\Programs\Antigravity\bin\antigravity-ide.cmd
     maxTimeoutMs: 120000
   mock:
     enabled: true

@@ -154,6 +154,56 @@ export class ConfigService {
     };
   }
 
+  public updateWhatsappChannelConfig(updates: {
+    authorizedSenderId?: string;
+    authorizedConversationId?: string;
+    enabled?: boolean;
+    headless?: boolean;
+  }): AppConfig {
+    const configDir = path.resolve(process.cwd(), "config");
+    const channelsFile = path.join(configDir, "channels.yaml");
+
+    let existingChannels: any = { channels: { whatsapp: {}, mock: {} } };
+    if (fs.existsSync(channelsFile)) {
+      try {
+        const raw = fs.readFileSync(channelsFile, "utf-8");
+        const parsed = yaml.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          existingChannels = parsed;
+        }
+      } catch {
+        // fallback
+      }
+    }
+
+    if (!existingChannels.channels) {
+      existingChannels.channels = {};
+    }
+    if (!existingChannels.channels.whatsapp) {
+      existingChannels.channels.whatsapp = {};
+    }
+
+    if (updates.authorizedSenderId !== undefined) {
+      existingChannels.channels.whatsapp.authorizedSenderId = updates.authorizedSenderId;
+    }
+    if (updates.authorizedConversationId !== undefined) {
+      existingChannels.channels.whatsapp.authorizedConversationId = updates.authorizedConversationId;
+    }
+    if (updates.enabled !== undefined) {
+      existingChannels.channels.whatsapp.enabled = updates.enabled;
+    }
+    if (updates.headless !== undefined) {
+      existingChannels.channels.whatsapp.headless = updates.headless;
+    }
+
+    if (fs.existsSync(configDir)) {
+      fs.writeFileSync(channelsFile, yaml.stringify(existingChannels), "utf-8");
+    }
+
+    this.config = this.load();
+    return this.config;
+  }
+
   private load(override?: Partial<AppConfig>): AppConfig {
     const defaultConfig = AppConfigSchema.parse({});
     const configDir = path.resolve(process.cwd(), "config");

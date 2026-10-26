@@ -70,14 +70,21 @@ Execute an offline, end-to-end simulated run without requiring WhatsApp or Antig
 npm run cli -- test-pipeline
 ```
 
-### 4. Link WhatsApp (One-Time Setup)
+### 4. Launch Interactive Web Dashboard (Recommended)
+Launch the visual Web Dashboard to link your browser, scan QR code, and lock authorized accounts:
+```powershell
+npm run dashboard
+```
+*Open [http://localhost:3100](http://localhost:3100) in your browser.*
+
+### 5. Link WhatsApp via CLI (Alternative)
 Launch the visual helper and scan the QR code using WhatsApp on your phone:
 ```powershell
 npm run cli -- login-whatsapp
 ```
 *Once scanned, press `Ctrl+C`. Credentials are saved to `./data/whatsapp_session`.*
 
-### 5. Start Orchestrator
+### 6. Start Headless Orchestrator Daemon
 ```powershell
 npm run cli -- start-whatsapp
 ```

@@ -1,4 +1,19 @@
 repositories:
+  - id: desktop
+    name: Desktop Workspace Root
+    description: Parent folder containing all desktop projects and explorer root
+    path: F:/Project/Desktop
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
   - id: wedocit
     name: wedocit
     description: Document editor project
@@ -6,9 +21,12 @@ repositories:
     allowedOperations:
       - read
       - review
+      - modify
+      - test
     allowedBranches:
       - main
       - master
+      - develop
     enabled: true
 
   - id: scanwitme
@@ -18,7 +36,115 @@ repositories:
     allowedOperations:
       - read
       - review
+      - modify
+      - test
     allowedBranches:
       - main
       - master
+      - develop
+    enabled: true
+
+  - id: scanwitme.ai
+    name: scanwitme.ai
+    description: Android ScanWitMe AI project
+    path: F:/Project/Android/scanwitme.ai
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
+  - id: dasborin
+    name: dasborin
+    description: Dashboard desktop application
+    path: F:/Project/Desktop/dasborin
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
+  - id: sawita
+    name: sawita
+    description: Sawita palm oil application
+    path: F:/Project/Desktop/sawita
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
+  - id: wekeepit
+    name: wekeepit
+    description: WeKeepIt storage and note management
+    path: F:/Project/Desktop/wekeepit
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
+  - id: wemoteit
+    name: wemoteit
+    description: WhatsApp AI agent orchestrator
+    path: F:/Project/Desktop/wemoteit
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
+  - id: wesnapit
+    name: wesnapit
+    description: WeSnapIt snapshot tool
+    path: F:/Project/Desktop/wesnapit
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
+  - id: wetimesit
+    name: wetimesit
+    description: WeTimesIt time management application
+    path: F:/Project/Desktop/wetimesit
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
     enabled: true

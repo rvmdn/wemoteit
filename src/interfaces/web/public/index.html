@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>wemoteit — WhatsApp AI Agent Orchestrator</title>
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.75);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(99, 102, 241, 0.6);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-emerald: #10b981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.2);
+      --accent-indigo: #6366f1;
+      --accent-indigo-glow: rgba(99, 102, 241, 0.25);
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --accent-cyan: #06b6d4;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-emerald), var(--accent-indigo));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 20px;
+      color: #fff;
+      box-shadow: 0 4px 14px var(--accent-indigo-glow);
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-text p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .dot-green { background: var(--accent-emerald); box-shadow: 0 0 10px var(--accent-emerald); animation: pulse 2s infinite; }
+    .dot-amber { background: var(--accent-amber); box-shadow: 0 0 10px var(--accent-amber); animation: pulse 1.5s infinite; }
+    .dot-red { background: var(--accent-rose); box-shadow: 0 0 10px var(--accent-rose); }
+    .dot-gray { background: var(--text-muted); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+    }
+
+    /* Container */
+    main {
+      flex: 1;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px 20px;
+      backdrop-filter: blur(12px);
+      transition: border-color 0.2s;
+    }
+
+    .metric-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .metric-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .metric-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* Content Layout */
+    .dashboard-layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 24px;
+      backdrop-filter: blur(12px);
+      margin-bottom: 24px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-header h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Form & Controls */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+
+    .form-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .form-control {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--accent-indigo);
+      box-shadow: 0 0 0 3px var(--accent-indigo-glow);
+    }
+
+    .form-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--accent-indigo);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #4f46e5;
+      box-shadow: 0 4px 12px var(--accent-indigo-glow);
+    }
+
+    .btn-emerald {
+      background: var(--accent-emerald);
+      color: #0b0f19;
+      font-weight: 700;
+    }
+    .btn-emerald:hover {
+      background: #059669;
+      color: #fff;
+      box-shadow: 0 4px 12px var(--accent-emerald-glow);
+    }
+
+    .btn-danger {
+      background: rgba(244, 63, 94, 0.15);
+      color: var(--accent-rose);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+    }
+    .btn-danger:hover {
+      background: var(--accent-rose);
+      color: #fff;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* QR Code Display Card */
+    .qr-container {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px dashed var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      margin: 18px 0;
+      min-height: 280px;
+    }
+
+    .qr-image {
+      width: 220px;
+      height: 220px;
+      background: #fff;
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    .qr-placeholder {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .qr-success-box {
+      color: var(--accent-emerald);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge-lock {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--accent-emerald);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Table */
+    .table-responsive {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    th {
+      padding: 12px 14px;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-main);
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .status-tag {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: inline-block;
+      text-transform: uppercase;
+    }
+
+    .tag-completed { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
+    .tag-running { background: rgba(99, 102, 241, 0.15); color: var(--accent-indigo); animation: pulse 2s infinite; }
+    .tag-queued { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+    .tag-failed { background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); }
+    .tag-cancelled { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+
+    /* Approval Card */
+    .approval-item {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .approval-info {
+      flex: 1;
+    }
+
+    .approval-token {
+      font-weight: 800;
+      color: var(--accent-amber);
+      font-size: 0.95rem;
+    }
+
+    .approval-prompt {
+      font-size: 0.85rem;
+      color: var(--text-main);
+      margin-top: 4px;
+    }
+
+    .approval-meta {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      display: none;
+      z-index: 1000;
+      animation: slideUp 0.3s forwards;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">W</div>
+      <div class="brand-text">
+        <h1>wemoteit <span style="font-size: 0.75rem; background: rgba(99, 102, 241, 0.2); color: var(--accent-indigo); padding: 2px 8px; border-radius: 4px;">ORCHESTRATOR</span></h1>
+        <p>WhatsApp AI Agent Control Dashboard (Windows & Antigravity IDE)</p>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-pill" id="globalStatusPill">
+        <span class="status-dot dot-gray" id="globalStatusDot"></span>
+        <span id="globalStatusText">CONNECTING...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main>
+
+    <!-- Top Metrics -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-title">Koneksi WhatsApp</div>
+        <div class="metric-value" id="metricWaState">Checking...</div>
+        <div class="metric-desc" id="metricWaDesc">Session: ./data/whatsapp_session</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Akun Terkunci (Locked Sender)</div>
+        <div class="metric-value" id="metricLockedAccount">
+          <span style="color: var(--accent-emerald);">self</span>
+        </div>
+        <div class="metric-desc">Hanya akun ini yang diizinkan</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Antrean & Status Job</div>
+        <div class="metric-value">
+          <span id="metricActiveJobs" style="color: var(--accent-indigo);">0</span>
+          <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">/ <span id="metricCompletedJobs">0</span> selesai</span>
+        </div>
+        <div class="metric-desc">Pekerjaan Antigravity yang diproses</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Repositori Terdaftar</div>
+        <div class="metric-value" id="metricRepoCount">2 Repos</div>
+        <div class="metric-desc">Target eksekusi AI coding agent</div>
+      </div>
+    </div>
+
+    <!-- Main 2-Column Grid -->
+    <div class="dashboard-layout">
+
+      <!-- Left Column: WhatsApp Link & Account Lock -->
+      <div>
+        
+        <!-- WhatsApp Connection Hub -->
+        <div class="card">
+          <div class="card-header">
+            <h2>📱 WhatsApp Web Connection & Browser Hub</h2>
+            <span id="waConnectionBadge" class="badge-lock" style="background: rgba(148, 163, 184, 0.1); color: var(--text-muted); border-color: var(--border-color);">
+              Checking...
+            </span>
+          </div>
+
+          <!-- Connection Mode Switcher Tabs -->
+          <div style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+            <button id="tabBtnCdp" class="btn btn-primary" style="padding: 6px 14px; font-size: 0.8rem;" onclick="switchConnTab('cdp')">
+              ⚡ Mode 1: Tempel ke Browser Aktif (Tanpa Scan Ulang)
+            </button>
+            <button id="tabBtnLaunch" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.8rem;" onclick="switchConnTab('launch')">
+              📦 Mode 2: Browser Terpisah (Dedicated)
+            </button>
+          </div>
+
+          <!-- Tab 1: Attach to Existing Browser (CDP) -->
+          <div id="tabContentCdp">
+            <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+              <div style="font-weight: 700; font-size: 0.85rem; color: var(--accent-indigo); margin-bottom: 4px;">
+                💡 Gunakan WhatsApp Web yang Sedang Terbuka di Browser Anda
+              </div>
+              <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                Mode ini langsung mengontrol tab WhatsApp Web di browser Anda. Tidak perlu scan QR ulang dan tidak membuka instance profil terpisah!
+              </p>
+              <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 0.75rem; color: var(--text-muted);">Status Port 9222:</span>
+                <span id="cdpStatusBadge" class="status-tag tag-queued">Memeriksa...</span>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;">
+              <button class="btn btn-outline" onclick="launchDebugBrowser('chrome')">
+                🌐 Buka Chrome Debug (Port 9222)
+              </button>
+              <button class="btn btn-outline" onclick="launchDebugBrowser('msedge')">
+                🌐 Buka Edge Debug (Port 9222)
+              </button>
+              <button class="btn btn-emerald" onclick="connectCdp()">
+                🔗 Tempel / Attach ke Tab WA Ini
+              </button>
+              <button class="btn btn-danger" onclick="disconnectWhatsApp()">
+                ⏹ Putuskan Sesi
+              </button>
+            </div>
+          </div>
+
+          <!-- Tab 2: Dedicated Instance Browser -->
+          <div id="tabContentLaunch" style="display: none;">
+            <div class="form-row">
+              <div class="form-group" style="flex: 1;">
+                <label class="form-label">Pilihan Browser di PC</label>
+                <select id="browserChannel" class="form-control">
+                  <option value="msedge" selected>Microsoft Edge (Bawaan Windows)</option>
+                  <option value="chrome">Google Chrome</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label class="form-label">Mode Tampilan Browser</label>
+                <select id="browserHeadless" class="form-control">
+                  <option value="true" selected>Headless (Background di balik layar)</option>
+                  <option value="false">Headful (Buka jendela browser terlihat)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+              <button id="btnConnectWa" class="btn btn-emerald" onclick="connectWhatsApp()">
+                🚀 Sambungkan Browser Baru
+              </button>
+              <button id="btnDisconnectWa" class="btn btn-danger" onclick="disconnectWhatsApp()">
+                ⏹ Putuskan Sesi
+              </button>
+            </div>
+          </div>
+
+          <!-- Live QR Code Viewer -->
+          <div class="qr-container" id="qrContainer">
+            <div id="qrLoadingPlaceholder" class="qr-placeholder">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <div>Klik <b>"Sambungkan WhatsApp"</b> untuk memuat sesi atau memindai QR Code.</div>
+            </div>
+            <div id="qrImageWrapper" style="display: none;">
+              <img id="qrImage" class="qr-image" src="" alt="WhatsApp Web QR Code" />
+              <div style="margin-top: 14px; font-size: 0.85rem; color: var(--text-main);">
+                Pindai QR ini melalui: <b>WhatsApp HP &gt; Perangkat Tertaut &gt; Tautkan Perangkat</b>
+              </div>
+            </div>
+            <div id="qrSuccessWrapper" class="qr-success-box" style="display: none;">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              <div style="font-weight: 700; font-size: 1.1rem;">WhatsApp Terhubung & Siap Mendengar!</div>
+              <div style="font-size: 0.85rem; color: var(--text-muted);" id="connectedAccountDetails">Profil siap menerima instruksi chat.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account Whitelist & Lock Gate -->
+        <div class="card">
+          <div class="card-header">
+            <h2>🔒 Kroscek & Kunci Akun Pengirim Sah (Security Gate)</h2>
+            <span class="badge-lock">SECURITY SHIELD ACTIVE</span>
+          </div>
+
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+            Untuk mencegah perintah liar, kuncilah nomor pengirim yang berwenang. Pesan dari nomor lain atau chat grup akan <b>otomatis ditolak</b> sebelum menyentuh kode program Anda.
+          </p>
+
+          <div class="form-group">
+            <label class="form-label">Nomor WhatsApp / Akun Pengirim yang Sah (Authorized Sender ID)</label>
+            <input type="text" id="lockSenderId" class="form-control" placeholder="Contoh: self (chat sendiri) atau 6281234567890" value="self" />
+            <div class="form-hint">Gunakan <code>self</code> jika Anda mengirim pesan ke nomor sendiri via WhatsApp ("Message Yourself"). Atau masukkan format nomor lengkap (misal: <code>6281234567890</code>).</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">ID Percakapan yang Diizinkan (Conversation ID)</label>
+            <input type="text" id="lockConversationId" class="form-control" placeholder="self" value="self" />
+            <div class="form-hint">Target chat yang dimonitor (biasanya <code>self</code> untuk self-chat).</div>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer;">
+              <input type="checkbox" id="lockEnableWa" checked />
+              <span>Aktifkan Channel WhatsApp (<code>channels.whatsapp.enabled: true</code>)</span>
+            </label>
+          </div>
+
+          <button class="btn btn-primary" onclick="lockAccount()">
+            🔒 Simpan & Kunci Akun Pengirim
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Approvals, Quick Test, and Jobs -->
+      <div>
+
+        <!-- Pending Approvals -->
+        <div class="card" id="pendingApprovalsCard" style="display: none; border-color: rgba(245, 158, 11, 0.4);">
+          <div class="card-header">
+            <h2>⚠️ Konfirmasi Approval Tertunda</h2>
+            <span class="status-tag tag-queued" id="pendingApprovalsBadge">0 Pending</span>
+          </div>
+          <div id="pendingApprovalsList"></div>
+        </div>
+
+        <!-- Quick Test Console -->
+        <div class="card">
+          <div class="card-header">
+            <h2>⚡ Quick Command Console</h2>
+          </div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">
+            Kirimkan simulasi perintah langsung ke Orchestrator untuk menguji respon agent:
+          </p>
+          <div class="form-row">
+            <input type="text" id="testCommandInput" class="form-control" placeholder="/status, /repos, atau /review wedocit check security" value="/status" />
+            <button class="btn btn-outline" onclick="sendTestCommand()">Kirim</button>
+          </div>
+          <div id="testCommandResponse" style="margin-top: 10px; font-size: 0.8rem; color: var(--accent-cyan); display: none;"></div>
+        </div>
+
+        <!-- Live Job History -->
+        <div class="card">
+          <div class="card-header">
+            <h2>📋 Riwayat Pekerjaan AI (Recent Jobs)</h2>
+            <button class="btn btn-outline" style="padding: 4px 10px; font-size: 0.75rem;" onclick="loadJobs()">Refresh</button>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job ID</th>
+                  <th>Status</th>
+                  <th>Repo</th>
+                  <th>Waktu</th>
+                </tr>
+              </thead>
+              <tbody id="jobsTableBody">
+                <tr>
+                  <td colspan="4" style="text-align: center; color: var(--text-muted);">Memuat riwayat job...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <div id="toast"></div>
+
+  <script>
+    // State
+    let currentSessionState = "uninitialized";
+
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById("toast");
+      toast.innerText = msg;
+      toast.style.borderColor = isError ? "var(--accent-rose)" : "var(--accent-emerald)";
+      toast.style.display = "block";
+      setTimeout(() => {
+        toast.style.display = "none";
+      }, 3500);
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch("/api/status");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Update metrics
+        const wa = data.whatsapp;
+        currentSessionState = wa.sessionState;
+
+        const globalDot = document.getElementById("globalStatusDot");
+        const globalText = document.getElementById("globalStatusText");
+        const badge = document.getElementById("waConnectionBadge");
+
+        if (wa.sessionState === "listening" || wa.sessionState === "authenticated") {
+          globalDot.className = "status-dot dot-green";
+          globalText.innerText = "ONLINE & LISTENING";
+          badge.className = "badge-lock";
+          badge.innerText = "CONNECTED";
+          badge.style.background = "rgba(16, 185, 129, 0.15)";
+          badge.style.color = "var(--accent-emerald)";
+        } else if (wa.sessionState === "needs_qr_login") {
+          globalDot.className = "status-dot dot-amber";
+          globalText.innerText = "WAITING QR SCAN";
+          badge.className = "badge-lock";
+          badge.innerText = "SCAN QR";
+          badge.style.background = "rgba(245, 158, 11, 0.15)";
+          badge.style.color = "var(--accent-amber)";
+        } else if (wa.sessionState === "launching") {
+          globalDot.className = "status-dot dot-amber";
+          globalText.innerText = "LAUNCHING BROWSER...";
+          badge.innerText = "LAUNCHING";
+        } else {
+          globalDot.className = "status-dot dot-gray";
+          globalText.innerText = "STANDBY / DISCONNECTED";
+          badge.innerText = "DISCONNECTED";
+          badge.style.background = "rgba(148, 163, 184, 0.1)";
+          badge.style.color = "var(--text-muted)";
+        }
+
+        document.getElementById("metricWaState").innerText = wa.sessionState.toUpperCase();
+        document.getElementById("metricLockedAccount").innerHTML = `<span style="color: var(--accent-emerald);">${wa.authorizedSenderId || "self"}</span>`;
+        document.getElementById("metricActiveJobs").innerText = data.jobs.running + data.jobs.queued;
+        document.getElementById("metricCompletedJobs").innerText = data.jobs.completed;
+        document.getElementById("metricRepoCount").innerText = `${data.repositories.length} Repos`;
+
+      } catch (err) {
+        console.error("Status fetch error", err);
+      }
+    }
+
+    async function fetchWhatsAppStatus() {
+      try {
+        const res = await fetch("/api/whatsapp/status");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const qrLoading = document.getElementById("qrLoadingPlaceholder");
+        const qrWrapper = document.getElementById("qrImageWrapper");
+        const qrSuccess = document.getElementById("qrSuccessWrapper");
+        const qrImg = document.getElementById("qrImage");
+
+        if (data.sessionState === "authenticated" || data.sessionState === "listening") {
+          qrLoading.style.display = "none";
+          qrWrapper.style.display = "none";
+          qrSuccess.style.display = "flex";
+          if (data.connectedAccount && data.connectedAccount.name) {
+            document.getElementById("connectedAccountDetails").innerText = `Profil aktif: ${data.connectedAccount.name}`;
+          }
+        } else if (data.sessionState === "needs_qr_login" && data.qr) {
+          qrLoading.style.display = "none";
+          qrSuccess.style.display = "none";
+          qrWrapper.style.display = "block";
+          qrImg.src = data.qr;
+        } else if (data.sessionState === "launching") {
+          qrLoading.innerHTML = `<div>Menginisialisasi browser WhatsApp Web... Mohon tunggu beberapa detik.</div>`;
+          qrLoading.style.display = "flex";
+          qrWrapper.style.display = "none";
+          qrSuccess.style.display = "none";
+        } else {
+          qrLoading.innerHTML = `
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <div>Klik <b>"Sambungkan WhatsApp"</b> untuk membuka sesi browser dan QR Code.</div>
+          `;
+          qrLoading.style.display = "flex";
+          qrWrapper.style.display = "none";
+          qrSuccess.style.display = "none";
+        }
+      } catch (err) {
+        console.error("WA status fetch error", err);
+      }
+    }
+
+    async function connectWhatsApp() {
+      const browserChannel = document.getElementById("browserChannel").value;
+      const headless = document.getElementById("browserHeadless").value === "true";
+
+      showToast("Menghubungkan browser WhatsApp Web...");
+      try {
+        const res = await fetch("/api/whatsapp/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ browserChannel, headless })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || "WhatsApp Web sedang diluncurkan...");
+          fetchStatus();
+          fetchWhatsAppStatus();
+        } else {
+          showToast(data.error || "Gagal menghubungkan", true);
+        }
+      } catch (err) {
+        showToast("Error menghubungkan: " + err.message, true);
+      }
+    }
+
+    async function disconnectWhatsApp() {
+      if (!confirm("Yakin ingin memutuskan sesi WhatsApp Web?")) return;
+      try {
+        const res = await fetch("/api/whatsapp/disconnect", { method: "POST" });
+        const data = await res.json();
+        showToast("Sesi browser WhatsApp ditutup.");
+        fetchStatus();
+        fetchWhatsAppStatus();
+      } catch (err) {
+        showToast("Gagal menutup sesi: " + err.message, true);
+      }
+    }
+
+    async function lockAccount() {
+      const authorizedSenderId = document.getElementById("lockSenderId").value.trim();
+      const authorizedConversationId = document.getElementById("lockConversationId").value.trim();
+      const enableWhatsapp = document.getElementById("lockEnableWa").checked;
+
+      if (!authorizedSenderId) {
+        alert("Nomor pengirim tidak boleh kosong!");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/security/lock-account", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            authorizedSenderId,
+            authorizedConversationId,
+            enableWhatsapp
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Akun pengirim berhasil dikunci ke: ${authorizedSenderId}`);
+          fetchStatus();
+        } else {
+          showToast(data.message || "Gagal mengunci akun", true);
+        }
+      } catch (err) {
+        showToast("Gagal: " + err.message, true);
+      }
+    }
+
+    async function loadJobs() {
+      try {
+        const res = await fetch("/api/jobs?limit=15");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Pending approvals
+        const approvalsCard = document.getElementById("pendingApprovalsCard");
+        const approvalsList = document.getElementById("pendingApprovalsList");
+        const approvalsBadge = document.getElementById("pendingApprovalsBadge");
+
+        if (data.pendingApprovals && data.pendingApprovals.length > 0) {
+          approvalsCard.style.display = "block";
+          approvalsBadge.innerText = `${data.pendingApprovals.length} Pending`;
+          approvalsList.innerHTML = data.pendingApprovals.map(appr => `
+            <div class="approval-item">
+              <div class="approval-info">
+                <div class="approval-token">Token: ${appr.token}</div>
+                <div class="approval-prompt">"${appr.prompt}" pada repo <b>${appr.repositoryId || "workspace"}</b></div>
+                <div class="approval-meta">Diminta oleh: ${appr.requestedBy} • Kedaluwarsa: ${new Date(appr.expiresAt).toLocaleTimeString()}</div>
+              </div>
+              <div>
+                <button class="btn btn-emerald" style="padding: 6px 12px; font-size: 0.8rem;" onclick="approveToken('${appr.token}')">✅ Setujui</button>
+              </div>
+            </div>
+          `).join("");
+        } else {
+          approvalsCard.style.display = "none";
+        }
+
+        // Table
+        const tbody = document.getElementById("jobsTableBody");
+        if (!data.jobs || data.jobs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Belum ada riwayat job di database.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = data.jobs.map(j => {
+          let tagClass = "tag-completed";
+          if (j.status === "running") tagClass = "tag-running";
+          else if (j.status === "queued") tagClass = "tag-queued";
+          else if (j.status === "failed") tagClass = "tag-failed";
+          else if (j.status === "cancelled") tagClass = "tag-cancelled";
+
+          return `
+            <tr>
+              <td><code>${j.id}</code></td>
+              <td><span class="status-tag ${tagClass}">${j.status}</span></td>
+              <td>${j.repositoryId || "workspace"}</td>
+              <td style="color: var(--text-muted); font-size: 0.75rem;">${new Date(j.createdAt).toLocaleTimeString()}</td>
+            </tr>
+          `;
+        }).join("");
+
+      } catch (err) {
+        console.error("Jobs fetch error", err);
+      }
+    }
+
+    async function approveToken(token) {
+      if (!confirm(`Setujui eksekusi task untuk token ${token}?`)) return;
+      try {
+        const res = await fetch("/api/jobs/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Task ${token} telah disetujui dan dialirkan ke antrean!`);
+          loadJobs();
+        } else {
+          showToast(data.error || "Gagal menyetujui", true);
+        }
+      } catch (err) {
+        showToast("Error: " + err.message, true);
+      }
+    }
+
+    async function sendTestCommand() {
+      const command = document.getElementById("testCommandInput").value.trim();
+      if (!command) return;
+
+      const respDiv = document.getElementById("testCommandResponse");
+      respDiv.style.display = "block";
+      respDiv.innerText = "Mengirim...";
+
+      try {
+        const res = await fetch("/api/test/command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command })
+        });
+        const data = await res.json();
+        if (data.success) {
+          respDiv.innerText = `✅ Perintah diproses (Correlation ID: ${data.correlationId})`;
+          loadJobs();
+          fetchStatus();
+        } else {
+          respDiv.innerText = `❌ ${data.error || "Gagal"}`;
+        }
+      } catch (err) {
+        respDiv.innerText = `Error: ${err.message}`;
+      }
+    }
+
+    // Tab switcher
+    function switchConnTab(tab) {
+      const btnCdp = document.getElementById("tabBtnCdp");
+      const btnLaunch = document.getElementById("tabBtnLaunch");
+      const contentCdp = document.getElementById("tabContentCdp");
+      const contentLaunch = document.getElementById("tabContentLaunch");
+
+      if (tab === "cdp") {
+        btnCdp.className = "btn btn-primary";
+        btnLaunch.className = "btn btn-outline";
+        contentCdp.style.display = "block";
+        contentLaunch.style.display = "none";
+      } else {
+        btnCdp.className = "btn btn-outline";
+        btnLaunch.className = "btn btn-primary";
+        contentCdp.style.display = "none";
+        contentLaunch.style.display = "block";
+      }
+    }
+
+    async function checkCdpStatus() {
+      try {
+        const res = await fetch("/api/whatsapp/cdp-status");
+        if (!res.ok) return;
+        const data = await res.json();
+        const badge = document.getElementById("cdpStatusBadge");
+        if (!badge) return;
+        if (data.available) {
+          badge.className = "status-tag tag-completed";
+          badge.innerText = `🟢 Browser Aktif Terdeteksi (${data.browser || "Edge/Chrome"})`;
+        } else {
+          badge.className = "status-tag tag-queued";
+          badge.innerText = `🟡 Port 9222 Belum Terdeteksi`;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    async function launchDebugBrowser(browser = "msedge") {
+      showToast(`Membuka ${browser === "chrome" ? "Chrome" : "Edge"} dengan port debugging 9222...`);
+      try {
+        const res = await fetch("/api/whatsapp/launch-debug-browser", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ browser, port: 9222 })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message);
+          setTimeout(checkCdpStatus, 2000);
+        } else {
+          showToast(data.error || "Gagal meluncurkan browser", true);
+        }
+      } catch (err) {
+        showToast("Error: " + err.message, true);
+      }
+    }
+
+    async function connectCdp() {
+      showToast("Menempelkan wemoteit ke tab WhatsApp Web di browser Anda...");
+      try {
+        const res = await fetch("/api/whatsapp/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "cdp", cdpEndpoint: "http://localhost:9222" })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || "Berhasil menempel ke browser!");
+          fetchStatus();
+          fetchWhatsAppStatus();
+        } else {
+          showToast(data.error || "Gagal menempel ke browser", true);
+        }
+      } catch (err) {
+        showToast("Error menempel ke browser: " + err.message, true);
+      }
+    }
+
+    // Polling intervals
+    fetchStatus();
+    fetchWhatsAppStatus();
+    checkCdpStatus();
+    loadJobs();
+
+    setInterval(() => {
+      fetchStatus();
+      fetchWhatsAppStatus();
+      checkCdpStatus();
+    }, 2500);
+
+    setInterval(loadJobs, 5000);
+  </script>
+</body>
+</html>

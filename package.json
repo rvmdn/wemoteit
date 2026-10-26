@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "cli": "tsx src/interfaces/cli/index.ts",
+    "dashboard": "tsx src/interfaces/web/index.ts",
     "start": "tsx src/app/bootstrap.ts"
   },
   "keywords": [

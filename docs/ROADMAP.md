@@ -44,7 +44,23 @@
 - [ ] Recovery test: simulate process kill during job execution, assert non-destructive restart.
 
 ## Phase 6: Hardening, Operational Setup & Documentation
-- [ ] Comprehensive security regression suite (prompt injection, path traversal, replay attacks).
-- [ ] Configuration validation tooling.
-- [ ] Operator runbook & QR code setup documentation.
-- [ ] Graceful termination handling (`SIGINT` / `SIGTERM`).
+- [x] Comprehensive security regression suite (prompt injection, path traversal, replay attacks).
+- [x] Configuration validation tooling.
+- [x] Operator runbook & QR code setup documentation.
+- [x] Graceful termination handling (`SIGINT` / `SIGTERM`).
+
+## Phase 7: Web Management Dashboard & Account Security Gate
+- [x] Lightweight HTTP REST Server (`src/interfaces/web/server.ts`).
+- [x] Interactive Control Dashboard Web UI (`src/interfaces/web/public/index.html`).
+- [x] Playwright QR code canvas extraction & non-blocking login monitoring.
+- [x] Account locking & sender whitelist persistence (`config/channels.yaml`).
+- [x] Live job queue inspection & 1-click token approval (`/approve APP-XXXX`).
+- [x] CLI entrypoint (`npm run dashboard` / `wemoteit dashboard`).
+- [x] Vitest automated test suite covering all dashboard APIs (53 passing tests).
+
+## Phase 8 (Backlog / Future Development): Native Multi-Account Gemini Pool
+- [ ] Direct `@google/genai` standalone agent integration inside wemoteit (native function calling for file exploration, editing, test execution).
+- [ ] Multi-account quota pooling (up to 5 Google accounts).
+- [ ] Circuit breaker & automatic HTTP 429 failover ("amunisi cadangan" quota rotation).
+- [ ] Multi-instance OAuth / API Key credential manager in Web Dashboard.
+

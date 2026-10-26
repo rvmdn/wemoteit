@@ -23,7 +23,7 @@ describe("Antigravity Execution Provider (Phase 4)", () => {
 
   it("resolves the local Antigravity IDE CLI binary path on Windows", () => {
     const cliPath = provider.resolveCliPath();
-    expect(cliPath).toContain("Antigravity IDE");
+    expect(cliPath).toContain("Antigravity");
     expect(cliPath.toLowerCase().endsWith(".cmd") || cliPath.toLowerCase().endsWith(".exe")).toBe(true);
   });
 

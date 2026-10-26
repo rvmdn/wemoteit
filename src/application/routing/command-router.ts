@@ -29,6 +29,12 @@ export class CommandRouter {
 
     correlationLogger.info("Processing incoming message");
 
+    // Strictly ignore bot notification replies to prevent echo loops in self-chat
+    if (/^[⚠️✅⏳🔒🛑]/.test(message.text.trim())) {
+      correlationLogger.debug("Message is an automated bot response; ignoring silently to prevent feedback loop");
+      return;
+    }
+
     // 1. Deduplication check
     const existing = await this.persistence.getMessageByProviderId(
       message.channelConnectionId,

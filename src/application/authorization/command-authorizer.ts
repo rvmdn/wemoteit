@@ -171,24 +171,40 @@ export class CommandAuthorizer {
       };
     }
 
-    // Match /review <repo> [prompt]
+    // Match /review <repo> [prompt] [--agent=<name>]
     const reviewMatch = text.match(/^\/(?:review)\s+([a-zA-Z0-9_.-]+)(?:\s+(.+))?/is);
     if (reviewMatch) {
-      const prompt = (reviewMatch[2] || "").trim() || "Review codebase for improvements";
+      let prompt = (reviewMatch[2] || "").trim() || "Review codebase for improvements";
+      let targetAgent: string | undefined;
+
+      const agentMatch = prompt.match(/--agent=([a-zA-Z0-9_-]+)/i);
+      if (agentMatch) {
+        targetAgent = agentMatch[1];
+        prompt = prompt.replace(agentMatch[0], "").trim();
+      }
+
       return {
         type: "review_repository",
         action: "review",
         targetRepoId: reviewMatch[1],
+        targetAgent,
         prompt,
         args: { repositoryId: reviewMatch[1], prompt },
       };
     }
 
-    // Match /run <repo> <prompt> [--approve=<token>]
+    // Match /run <repo> <prompt> [--approve=<token>] [--agent=<name>]
     const runMatch = text.match(/^\/(?:run|task)\s+([a-zA-Z0-9_.-]+)\s+(.+)/is);
     if (runMatch) {
       let prompt = runMatch[2].trim();
       let approvalToken: string | undefined;
+      let targetAgent: string | undefined;
+
+      const agentMatch = prompt.match(/--agent=([a-zA-Z0-9_-]+)/i);
+      if (agentMatch) {
+        targetAgent = agentMatch[1];
+        prompt = prompt.replace(agentMatch[0], "").trim();
+      }
 
       const tokenMatch = prompt.match(/--approve=([a-zA-Z0-9_-]+)/);
       if (tokenMatch) {
@@ -200,6 +216,7 @@ export class CommandAuthorizer {
         type: "run_task",
         action: "run_task",
         targetRepoId: runMatch[1],
+        targetAgent,
         prompt,
         args: { prompt, repositoryId: runMatch[1] },
         approvalToken,
@@ -225,6 +242,7 @@ export class CommandAuthorizer {
       type: CommandType;
       action: string;
       targetRepoId?: string;
+      targetAgent?: string;
       prompt?: string;
       args: Record<string, unknown>;
       approvalToken?: string;
@@ -233,7 +251,12 @@ export class CommandAuthorizer {
     reason?: string
   ): Command {
     const commandId = `cmd-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
-    const targetAgent = "mock"; // Default agent provider in Phase 1-3
+    const config = this.configService.getConfig();
+    const defaultAgent =
+      message.sourceType === "whatsapp" && config.agents.antigravity?.enabled
+        ? "antigravity"
+        : "mock";
+    const targetAgent = parsed.targetAgent || defaultAgent;
 
     return CommandSchema.parse({
       id: commandId,

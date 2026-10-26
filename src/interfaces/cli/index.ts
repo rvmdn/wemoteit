@@ -384,4 +384,19 @@ program
     }
   });
 
+program
+  .command("dashboard")
+  .description("Start the interactive Web Management Dashboard & Account Binding Gate")
+  .option("-p, --port <number>", "Port number for web server", "3100")
+  .action(async (options) => {
+    try {
+      const { startDashboard } = await import("../web/index.js");
+      const port = parseInt(options.port, 10);
+      await startDashboard(port);
+    } catch (err: any) {
+      console.error("Dashboard failed to start:", err.message);
+      process.exit(1);
+    }
+  });
+
 program.parse(process.argv);

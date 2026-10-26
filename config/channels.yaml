@@ -1,6 +1,6 @@
 channels:
   whatsapp:
-    enabled: false
+    enabled: true
     provider: whatsapp
     authorizedSenderId: self
     authorizedConversationId: self

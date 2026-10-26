@@ -69,6 +69,7 @@ export class AntigravityExecutionProvider implements ExecutionProvider {
     // Default standard Windows install paths for Antigravity IDE
     const localAppData = process.env.LOCALAPPDATA || "C:\\Users\\822117\\AppData\\Local";
     const candidates = [
+      path.join(localAppData, "Programs", "Antigravity", "bin", "antigravity-ide.cmd"),
       path.join(localAppData, "Programs", "Antigravity IDE", "bin", "antigravity-ide.cmd"),
       path.join(localAppData, "Programs", "Antigravity IDE", "Antigravity IDE.exe"),
       "C:\\Program Files\\Antigravity IDE\\bin\\antigravity-ide.cmd",
@@ -81,7 +82,7 @@ export class AntigravityExecutionProvider implements ExecutionProvider {
     }
 
     throw new ProviderError(
-      "Antigravity IDE CLI executable was not found. Please verify installation at 'Antigravity IDE/bin/antigravity-ide.cmd'",
+      "Antigravity IDE CLI executable was not found. Please verify installation at 'Antigravity/bin/antigravity-ide.cmd'",
       this.provider,
       { checkedPaths: candidates }
     );
@@ -146,7 +147,8 @@ export class AntigravityExecutionProvider implements ExecutionProvider {
     const prompt = request.prompt;
     const args = ["chat", "--reuse-window", "--mode", mode, prompt];
 
-    const child = spawn(cliPath, args, {
+    const executable = cliPath.includes(" ") ? `"${cliPath}"` : cliPath;
+    const child = spawn(executable, args, {
       cwd: targetCwd,
       env: {
         ...process.env,
@@ -245,10 +247,10 @@ export class AntigravityExecutionProvider implements ExecutionProvider {
 
       const completedAt = new Date().toISOString();
       const durationMs = Date.now() - new Date(startedAt).getTime();
+      const stdoutContent = activeState.stdout.trim();
       const isSuccess = exitCode === 0;
-
       const rawSummary = isSuccess
-        ? activeState.stdout.trim() || `Antigravity agent completed task successfully in workspace ${targetCwd}.`
+        ? stdoutContent || this.buildContextualSummary(targetCwd, request.prompt)
         : activeState.stderr.trim() || `Antigravity agent exited with non-zero exit code: ${exitCode}`;
 
       const safeSummary = redactSecrets(rawSummary.slice(0, 3000));
@@ -317,4 +319,70 @@ export class AntigravityExecutionProvider implements ExecutionProvider {
       return { cancelled: false, reason: err.message };
     }
   }
+
+  private buildContextualSummary(targetCwd: string, prompt: string): string {
+    const lines: string[] = [
+      `🚀 Antigravity IDE agent session dispatched for prompt: "${prompt}".`,
+      `📂 Workspace: ${targetCwd}`,
+    ];
+
+    try {
+      if (fs.existsSync(targetCwd)) {
+        // 1. Check README.md
+        const readmePath = path.join(targetCwd, "README.md");
+        if (fs.existsSync(readmePath)) {
+          const readmeContent = fs.readFileSync(readmePath, "utf-8").trim();
+          const firstParagraph = readmeContent
+            .split("\n")
+            .filter((l) => l.trim().length > 0 && !l.startsWith("---") && !l.startsWith("```"))
+            .slice(0, 4)
+            .join("\n");
+          if (firstParagraph) {
+            lines.push(`\n📖 Project Summary:\n${firstParagraph}`);
+          }
+        }
+
+        // 2. Check package.json
+        const pkgPath = path.join(targetCwd, "package.json");
+        if (fs.existsSync(pkgPath)) {
+          try {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+            if (pkg.name || pkg.description) {
+              lines.push(`\n📦 Package: ${pkg.name || "unnamed"} (v${pkg.version || "1.0.0"})`);
+              if (pkg.description) lines.push(`• Description: ${pkg.description}`);
+            }
+          } catch {
+            // Ignore
+          }
+        }
+
+        // 3. Check manifest.json (e.g. extension)
+        const manifestPath = path.join(targetCwd, "manifest.json");
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+            lines.push(`\n🧩 Extension Manifest: ${manifest.name || "Browser Extension"} (v${manifest.version || "1.0.0"})`);
+            if (manifest.description) lines.push(`• Description: ${manifest.description}`);
+          } catch {
+            // Ignore
+          }
+        }
+
+        // 4. File Structure Preview
+        const entries = fs.readdirSync(targetCwd, { withFileTypes: true });
+        const visibleEntries = entries
+          .filter((e) => !e.name.startsWith(".") && e.name !== "node_modules" && e.name !== "dist")
+          .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
+          .slice(0, 10);
+        if (visibleEntries.length > 0) {
+          lines.push(`\n📁 Files (${visibleEntries.length}): ${visibleEntries.join(", ")}`);
+        }
+      }
+    } catch {
+      // Ignore filesystem inspection errors
+    }
+
+    return lines.join("\n");
+  }
 }
+
