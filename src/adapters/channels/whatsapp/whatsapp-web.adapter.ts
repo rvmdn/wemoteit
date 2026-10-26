@@ -485,8 +485,11 @@ export class WhatsAppWebAdapter implements InputChannelAdapter, OutputChannelAda
                 if (dataId && text.trim()) {
                   // data-id format in WhatsApp Web: [fromMe]_[remoteJid]_[messageId]
                   const parts = dataId.split("_");
+                  const isFromMe = parts[0] === "true";
                   const providerMessageId = parts.length >= 3 ? parts[2] : dataId;
-                  const senderId = parts.length >= 2 ? parts[1] : "self";
+                  const rawSender = parts.length >= 2 ? parts[1] : "self";
+                  const cleanSender = rawSender.replace(/@(c\.us|s\.whatsapp\.net)$/, "");
+                  const senderId = isFromMe ? "self" : cleanSender;
 
                   (window as any).__wemoteit_on_message({
                     providerMessageId,

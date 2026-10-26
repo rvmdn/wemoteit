@@ -3,6 +3,8 @@ import { SqliteDatabase } from "../adapters/persistence/sqlite/sqlite.database.j
 import { SqlitePersistenceRepository } from "../adapters/persistence/sqlite/sqlite.repository.js";
 import { MockExecutionProvider } from "../adapters/agents/mock/mock-execution.provider.js";
 import { AntigravityExecutionProvider } from "../adapters/agents/antigravity/antigravity-execution.provider.js";
+import { GeminiAccountPoolManager } from "../adapters/agents/gemini/gemini-account-pool.js";
+import { GeminiExecutionProvider } from "../adapters/agents/gemini/gemini-execution.provider.js";
 import { WhatsAppWebAdapter } from "../adapters/channels/whatsapp/whatsapp-web.adapter.js";
 import { CommandAuthorizer } from "../application/authorization/command-authorizer.js";
 import { JobManager } from "../application/jobs/job-manager.js";
@@ -63,10 +65,13 @@ export async function bootstrap() {
   // 4. Execution Providers
   const mockProvider = new MockExecutionProvider();
   const antigravityProvider = new AntigravityExecutionProvider(config.agents.antigravity);
+  const geminiPoolManager = new GeminiAccountPoolManager(persistence);
+  const geminiProvider = new GeminiExecutionProvider(geminiPoolManager);
 
   const providerRegistry = new Map();
   providerRegistry.set("mock", mockProvider);
   providerRegistry.set("antigravity", antigravityProvider);
+  providerRegistry.set("gemini", geminiProvider);
 
   // 5. Channel Adapter
   const waConfig = config.channels.whatsapp;

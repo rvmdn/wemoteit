@@ -470,6 +470,14 @@ export class DashboardWebServer {
         return;
       }
 
+      // Enforce maximum 5 account slots
+      const existingAccounts = await this.options.persistence.listGeminiAccounts();
+      const isExisting = existingAccounts.some((a) => a.id === id);
+      if (!isExisting && existingAccounts.length >= 5) {
+        this.json(res, 400, { error: "Gemini account pool limit reached (maximum 5 accounts)." });
+        return;
+      }
+
       const now = new Date().toISOString();
       await this.options.persistence.saveGeminiAccount({
         id,
@@ -522,6 +530,7 @@ export class DashboardWebServer {
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: "Ping test: respond with 'PONG: Gemini is ready'" }] }],
           }),
+          signal: AbortSignal.timeout(10000),
         });
 
         if (!response.ok) {

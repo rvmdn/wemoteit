@@ -4,6 +4,10 @@ agents:
     executionMode: cli
     cliPath: C:\Users\822117\AppData\Local\Programs\Antigravity\bin\antigravity-ide.cmd
     maxTimeoutMs: 120000
+  gemini:
+    enabled: true
+    executionMode: pool
+    maxTimeoutMs: 60000
   mock:
     enabled: true
     executionMode: mock

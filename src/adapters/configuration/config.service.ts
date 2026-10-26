@@ -33,6 +33,12 @@ const MockAgentConfigSchema = z.object({
   maxTimeoutMs: z.number().int().default(30000),
 });
 
+const GeminiAgentConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  executionMode: z.enum(["pool", "mock"]).default("pool"),
+  maxTimeoutMs: z.number().int().default(60000),
+});
+
 export const AppConfigSchema = z.object({
   version: z.number().int().default(1),
   workspace: z
@@ -81,6 +87,11 @@ export const AppConfigSchema = z.object({
         executionMode: "mock",
         maxTimeoutMs: 120000,
       }),
+      gemini: GeminiAgentConfigSchema.default({
+        enabled: true,
+        executionMode: "pool",
+        maxTimeoutMs: 60000,
+      }),
       mock: MockAgentConfigSchema.default({
         enabled: true,
         executionMode: "mock",
@@ -92,6 +103,11 @@ export const AppConfigSchema = z.object({
         enabled: false,
         executionMode: "mock",
         maxTimeoutMs: 120000,
+      },
+      gemini: {
+        enabled: true,
+        executionMode: "pool",
+        maxTimeoutMs: 60000,
       },
       mock: {
         enabled: true,

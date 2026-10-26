@@ -181,4 +181,99 @@ describe("Gemini Account Pool & Multi-Account Rotation (Phase 8)", () => {
       global.fetch = originalFetch;
     }
   });
+
+  it("rotates account on HTTP 503 (model overloaded)", async () => {
+    await persistence.saveGeminiAccount(sampleAccount1);
+    await persistence.saveGeminiAccount(sampleAccount2);
+
+    const provider = new GeminiExecutionProvider(poolManager);
+    let callCount = 0;
+
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
+      callCount++;
+      if (url.includes(sampleAccount1.apiKey)) {
+        return {
+          ok: false,
+          status: 503,
+          text: async () => JSON.stringify({ error: { message: "The model is overloaded. Please try again later." } }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: "Berhasil pulih dari 503" }] } }],
+        }),
+      };
+    }) as any;
+
+    try {
+      const handle = await provider.execute(
+        {
+          jobId: "job-test-503",
+          workspaceId: "ws-primary",
+          action: "review",
+          prompt: "test overload",
+          correlationId: "corr-503-test",
+        },
+        {}
+      );
+
+      let status = await provider.getStatus(handle);
+      const start = Date.now();
+      while (status.state === "running" && Date.now() - start < 3000) {
+        await new Promise((r) => setTimeout(r, 50));
+        status = await provider.getStatus(handle);
+      }
+
+      expect(status.state).toBe("completed");
+      expect(status.result?.status).toBe("success");
+      expect(status.result?.summary).toContain("Berhasil pulih dari 503");
+      expect(callCount).toBe(2);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("surfaces finishReason when text generation is empty or blocked", async () => {
+    await persistence.saveGeminiAccount(sampleAccount1);
+
+    const provider = new GeminiExecutionProvider(poolManager);
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockImplementation(async () => {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [{ finishReason: "SAFETY" }],
+        }),
+      };
+    }) as any;
+
+    try {
+      const handle = await provider.execute(
+        {
+          jobId: "job-test-safety",
+          workspaceId: "ws-primary",
+          action: "review",
+          prompt: "unsafe prompt",
+          correlationId: "corr-safety",
+        },
+        {}
+      );
+
+      let status = await provider.getStatus(handle);
+      const start = Date.now();
+      while (status.state === "running" && Date.now() - start < 3000) {
+        await new Promise((r) => setTimeout(r, 50));
+        status = await provider.getStatus(handle);
+      }
+
+      expect(status.state).toBe("failed");
+      expect(status.result?.summary).toContain("finishReason: SAFETY");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });

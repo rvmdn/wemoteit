@@ -202,6 +202,45 @@ describe("Web Management Dashboard & Account Security Gate", () => {
     expect(finalData.accounts.length).toBe(0);
   });
 
+  it("enforces maximum 5 accounts limit in Gemini pool", async () => {
+    // Add 5 accounts
+    for (let i = 1; i <= 5; i++) {
+      const res = await fetch(`http://localhost:${port}/api/gemini/accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: `slot-${i}`,
+          label: `Account Slot ${i}`,
+          apiKey: `AIzaSyDummyKeyNumber${i}123456`,
+          priority: i,
+        }),
+      });
+      expect(res.status).toBe(200);
+    }
+
+    // Attempt to add 6th account should be rejected with 400
+    const res6 = await fetch(`http://localhost:${port}/api/gemini/accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "slot-6",
+        label: "Account Slot 6",
+        apiKey: "AIzaSyDummyKeyNumber6123456",
+        priority: 6,
+      }),
+    });
+    expect(res6.status).toBe(400);
+    const data6 = await res6.json();
+    expect(data6.error).toContain("maximum 5 accounts");
+
+    // Clean up
+    for (let i = 1; i <= 5; i++) {
+      await fetch(`http://localhost:${port}/api/gemini/accounts?id=slot-${i}`, {
+        method: "DELETE",
+      });
+    }
+  });
+
   it("returns 404 for non-existent API routes", async () => {
     const res = await fetch(`http://localhost:${port}/api/non_existent_route`);
     expect(res.status).toBe(404);

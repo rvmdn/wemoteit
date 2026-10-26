@@ -35,10 +35,17 @@ export class CommandAuthorizer {
       };
     }
 
-    if (
-      channelConfig.authorizedSenderId !== "*" &&
-      channelConfig.authorizedSenderId !== message.senderId
-    ) {
+    const normalizeSender = (id: string) => id.replace(/@(c\.us|s\.whatsapp\.net)$/, "").replace(/[^a-zA-Z0-9]/g, "");
+    const authSenderNorm = normalizeSender(channelConfig.authorizedSenderId);
+    const msgSenderNorm = normalizeSender(message.senderId);
+
+    const isAuthorizedSender =
+      channelConfig.authorizedSenderId === "*" ||
+      channelConfig.authorizedSenderId === message.senderId ||
+      authSenderNorm === msgSenderNorm ||
+      (channelConfig.authorizedSenderId === "self" && (message.senderId === "self" || message.conversationId === "self"));
+
+    if (!isAuthorizedSender) {
       return {
         decision: "deny",
         reason: `Sender ID '${message.senderId}' is not authorized.`,
@@ -181,6 +188,9 @@ export class CommandAuthorizer {
       if (agentMatch) {
         targetAgent = agentMatch[1];
         prompt = prompt.replace(agentMatch[0], "").trim();
+      }
+      if (!prompt) {
+        prompt = "Review codebase for improvements";
       }
 
       return {

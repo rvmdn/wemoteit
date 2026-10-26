@@ -126,4 +126,41 @@ describe("Command Authorizer", () => {
     expect(res.decision).toBe("allow");
     expect(res.command?.targetAgentProfileId).toBe("mock");
   });
+
+  it("handles --agent=gemini without prompt by providing default fallback", () => {
+    const msg = {
+      ...baseMessage,
+      text: "/review wedocit --agent=gemini",
+    };
+    const res = authorizer.authorizeAndParse(msg);
+    expect(res.decision).toBe("allow");
+    expect(res.command?.targetAgentProfileId).toBe("gemini");
+    expect(res.command?.arguments.prompt).toBe("Review codebase for improvements");
+  });
+
+  it("authorizes phone sender formatted with @c.us against locked phone number", () => {
+    configService.updateWhatsappChannelConfig({
+      authorizedSenderId: "62812345678",
+      authorizedConversationId: "self",
+      enabled: true,
+    });
+
+    const msg = {
+      ...baseMessage,
+      sourceType: "whatsapp",
+      senderId: "62812345678@c.us",
+      conversationId: "self",
+      text: "/status",
+    };
+
+    const res = authorizer.authorizeAndParse(msg);
+    expect(res.decision).toBe("allow");
+
+    // Reset to default
+    configService.updateWhatsappChannelConfig({
+      authorizedSenderId: "self",
+      authorizedConversationId: "self",
+      enabled: true,
+    });
+  });
 });

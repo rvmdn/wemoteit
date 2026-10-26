@@ -47,14 +47,27 @@ export class ExecutionCoordinator {
         }
       );
 
+      // Determine provider timeout from capabilities
+      const capabilities = await provider.getCapabilities();
+      const timeoutMs = capabilities.maxTimeoutMs || 60000;
+
       // Poll or wait for completion (non-blocking for external events)
       let status = await provider.getStatus(handle);
       const startTime = Date.now();
-      const timeoutMs = 30000;
 
       while (status.state === "running" && Date.now() - startTime < timeoutMs) {
         await new Promise((r) => setTimeout(r, 50));
         status = await provider.getStatus(handle);
+      }
+
+      if (status.state === "running") {
+        await provider.requestCancellation(handle);
+        const timeoutMsg = `Job execution timed out after ${timeoutMs}ms`;
+        await this.jobManager.transitionJob(job.id, "failed", timeoutMsg, {
+          errorCode: "TIMEOUT",
+          errorSummary: timeoutMsg,
+        });
+        throw new Error(timeoutMsg);
       }
 
       if (status.state === "completed" && status.result) {

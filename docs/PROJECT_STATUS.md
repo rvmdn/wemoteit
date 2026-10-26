@@ -12,30 +12,32 @@
 | **Phase 5** | End-to-End Orchestration & Result Delivery | **Completed** | Implemented full correlation tracking across every stage (Message ➔ Command ➔ Job ➔ Result ➔ Delivery Attempt ➔ Audit Event). Separated delivery failure state from job execution outcomes (failed WhatsApp replies do not rerun underlying jobs; independent retry mechanism provided). Added `wemoteit trace <correlationId>` CLI command. **41/41 automated tests passing.** |
 | **Phase 6** | Hardening & Production Operations | **Completed** | Implemented unified graceful lifecycle management ([`LifecycleManager`](file:///F:/Project/Desktop/wemoteit/src/app/lifecycle.ts) and [`bootstrap.ts`](file:///F:/Project/Desktop/wemoteit/src/app/bootstrap.ts)), comprehensive security regression test suite ([`tests/security/security-regression.test.ts`](file:///F:/Project/Desktop/wemoteit/tests/security/security-regression.test.ts)), detailed operations runbook ([`docs/OPERATIONS.md`](file:///F:/Project/Desktop/wemoteit/docs/OPERATIONS.md)), and user-facing documentation ([`README.md`](file:///F:/Project/Desktop/wemoteit/README.md)). **46/46 automated tests passing across 12 test suites.** |
 | **Phase 7** | Web Management Dashboard & Account Security Gate | **Completed** | Implemented native HTTP/REST Dashboard server ([`src/interfaces/web/server.ts`](file:///f:/Project/Desktop/wemoteit/src/interfaces/web/server.ts)), rich interactive Web UI ([`src/interfaces/web/public/index.html`](file:///f:/Project/Desktop/wemoteit/src/interfaces/web/public/index.html)), real-time WhatsApp Web connection & QR Code canvas extraction, authorized sender lock & persistence ([`ConfigService.updateWhatsappChannelConfig`](file:///f:/Project/Desktop/wemoteit/src/adapters/configuration/config.service.ts)), live job queue and pending approvals manager. **53/53 automated tests passing across 13 test suites.** |
-| **Phase 8** | Multi-Account Gemini Pool Engine | **Completed** | Implemented quota-failover pool for up to 5 Google Gemini accounts (`migrations/003_gemini_accounts.sql`, [`GeminiAccountPoolManager`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-account-pool.ts), [`GeminiExecutionProvider`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-execution.provider.ts)), automatic rate limit recovery (HTTP 429 cooldown & instant rotation), zero secret leakage with key masking, full dashboard CRUD & ping test console. **64/64 automated tests passing across 14 test suites.** |
+| **Phase 8** | Multi-Account Gemini Pool Engine & Hardening | **Completed** | Implemented quota-failover pool for up to 5 Google Gemini accounts (`migrations/003_gemini_accounts.sql`, [`GeminiAccountPoolManager`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-account-pool.ts), [`GeminiExecutionProvider`](file:///f:/Project/Desktop/wemoteit/src/adapters/agents/gemini/gemini-execution.provider.ts)), automatic rate limit recovery (HTTP 429 & 503 model overload cooldown & instant rotation), zero secret leakage with key masking, full dashboard CRUD & ping test console, dynamic provider timeout, sender phone number normalization. **69/69 automated tests passing across 14 test suites.** |
 
 ---
 
-## Phase 8 Implementation Summary (Multi-Account Gemini Pool Engine)
+## Phase 8 Implementation Summary (Multi-Account Gemini Pool Engine & Hardening)
 
 1. **Multi-Account Failover Pool (`GeminiAccountPoolManager`)**:
    - Mendukung hingga 5 akun Google Gemini (Google AI Studio) sebagai amunisi cadangan kuota gratis.
    - Rotasi otomatis berdasarkan `priority` (1-5) dan tracking pemakaian harian (`requestsToday`).
-   - Penanganan instan HTTP 429 (`RESOURCE_EXHAUSTED`): akun yang terkena limit otomatis di-cooldown selama 60 detik dan request langsung dialihkan ke akun berikutnya tanpa kegagalan ke pengguna.
+   - Penanganan instan HTTP 429 (`RESOURCE_EXHAUSTED`) dan HTTP 503 (`model overloaded`): akun yang terkena limit otomatis di-cooldown selama 60 detik dan request langsung dialihkan ke akun berikutnya tanpa kegagalan ke pengguna.
 
 2. **Native Direct Execution Provider (`GeminiExecutionProvider`)**:
    - Terintegrasi langsung dengan endpoint `generativelanguage.googleapis.com` via native Node `fetch`.
    - Mengambil konteks repositori otomatis (`README.md`, file structure, manifest) untuk memberikan jawaban/review mendalam.
+   - Penanganan `finishReason: SAFETY` dan `blockReason` secara transparan ke pengguna.
    - Tanpa ketergantungan library berat, timeout terkontrol, dan streaming/abortable.
 
 3. **Dashboard Web UI & Zero Secret Exposure**:
    - 5 slot akun visual di Web Dashboard (`http://localhost:3100`) dengan status live badge (`Active`, `Cooldown`, `Exhausted`).
-   - Formulir pendaftaran akun dan tombol uji koneksi langsung (*Ping Test Console*).
+   - Validasi batas maksimal 5 slot akun pada backend REST endpoint.
+   - Formulir pendaftaran akun dan tombol uji koneksi langsung (*Ping Test Console*) dengan batas waktu 10s.
    - Seluruh API Key disamarkan (*masked*, contoh `AIza...91aB`) baik di web, logging, maupun event stream.
 
-4. **Automated Testing**:
-   - **64 automated tests passing across 14 test suites in Vitest.**
-   - Pengujian mencakup simulasi rotasi kuota, kegagalan 429 bertingkat, deduplikasi akun, serta REST CRUD API.
+4. **Automated Testing & Hardening**:
+   - **69 automated tests passing across 14 test suites in Vitest.**
+   - Pengujian mencakup simulasi rotasi kuota, kegagalan 429 & 503 bertingkat, fallback prompt review `--agent=gemini`, normalisasi nomor telepon `@c.us`, penolakan slot > 5, serta REST CRUD API.
 
 ---
 
