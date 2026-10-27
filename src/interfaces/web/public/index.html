@@ -732,9 +732,11 @@
             </div>
             <div class="form-row" style="margin-bottom: 10px;">
               <input type="password" id="geminiAccountApiKey" class="form-control" placeholder="Google AI Studio API Key (AIzaSy...)" style="flex: 1;" />
-              <select id="geminiAccountModel" class="form-control" style="width: 175px;">
-                <option value="gemini-1.5-flash" selected>Gemini 1.5 Flash (Stabil)</option>
+              <select id="geminiAccountModel" class="form-control" style="width: 185px;">
+                <option value="gemini-1.5-flash" selected>Gemini 1.5 Flash</option>
+                <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash Latest</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                 <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                 <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
               </select>
@@ -1248,7 +1250,8 @@
 
     async function testGeminiApiKey() {
       const apiKey = document.getElementById("geminiAccountApiKey").value.trim();
-      const model = document.getElementById("geminiAccountModel").value;
+      const modelSelect = document.getElementById("geminiAccountModel");
+      const model = modelSelect.value;
       const feedback = document.getElementById("geminiTestFeedback");
 
       if (!apiKey) {
@@ -1258,7 +1261,7 @@
 
       feedback.style.display = "block";
       feedback.style.color = "var(--text-muted)";
-      feedback.innerText = "Mengirim ping test ke Google Gemini API...";
+      feedback.innerText = "Mengirim ping test ke Google Gemini API (dengan auto-discovery)...";
 
       try {
         const res = await fetch("/api/gemini/test", {
@@ -1267,9 +1270,31 @@
           body: JSON.stringify({ apiKey, model })
         });
         const data = await res.json();
+
+        // Dynamically update model dropdown if availableModels returned
+        if (data.availableModels && Array.isArray(data.availableModels) && data.availableModels.length > 0) {
+          const currentChosen = data.activeModel || modelSelect.value;
+          modelSelect.innerHTML = "";
+          data.availableModels.forEach((m) => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m + (m.includes("flash") ? " ⚡" : "");
+            if (m === currentChosen) opt.selected = true;
+            modelSelect.appendChild(opt);
+          });
+          modelSelect.value = currentChosen;
+        }
+
         if (data.success) {
+          if (data.activeModel) {
+            modelSelect.value = data.activeModel;
+          }
           feedback.style.color = "var(--accent-emerald)";
-          feedback.innerText = `✅ Sukses! Respon Gemini: "${data.answer}"`;
+          let msg = `✅ Sukses! Model aktif: ${data.activeModel || model}\nRespon Gemini: "${data.answer}"`;
+          if (data.autoSwitched) {
+            msg = `🔄 ${data.note}\n` + msg;
+          }
+          feedback.innerText = msg;
         } else {
           feedback.style.color = "var(--accent-rose)";
           feedback.innerText = `❌ Gagal: ${data.error}`;

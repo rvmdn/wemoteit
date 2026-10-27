@@ -229,6 +229,30 @@ export class GeminiExecutionProvider implements ExecutionProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
+      // If 404 model not found, try fallback auto-discovery
+      if (response.status === 404 && !signal.aborted) {
+        logger.warn(
+          { model, accountId: account.id },
+          "Gemini model returned 404. Attempting auto-discovery via ListModels..."
+        );
+        const discovered = await this.discoverModels(account.apiKey, signal);
+        if (discovered.length > 0 && !discovered.includes(model)) {
+          const fallbackModel =
+            discovered.find((m) => m.includes("flash") && !m.includes("vision")) ||
+            discovered[0];
+          logger.info(
+            { fallbackModel, accountId: account.id },
+            "Retrying execution with discovered Gemini model"
+          );
+          return this.callGeminiApi(
+            { ...account, model: fallbackModel },
+            userPrompt,
+            repoContext,
+            signal
+          );
+        }
+      }
+
       const err: any = new Error(`HTTP ${response.status}: ${errorText}`);
       err.status = response.status;
       throw err;
@@ -303,6 +327,39 @@ export class GeminiExecutionProvider implements ExecutionProvider {
       progressSummary: message,
       result,
     };
+  }
+
+  private async discoverModels(apiKey: string, signal?: AbortSignal): Promise<string[]> {
+    const endpoints = [
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`,
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        const resp = await fetch(endpoint, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          signal: signal || AbortSignal.timeout(15000),
+        });
+        if (resp.ok) {
+          const data: any = await resp.json();
+          if (Array.isArray(data.models)) {
+            return data.models
+              .filter(
+                (m: any) =>
+                  !m.supportedGenerationMethods ||
+                  m.supportedGenerationMethods.includes("generateContent")
+              )
+              .map((m: any) => m.name.replace(/^models\//, ""))
+              .filter((name: string) => typeof name === "string" && name.length > 0);
+          }
+        }
+      } catch {
+        // try next endpoint
+      }
+    }
+    return [];
   }
 
   public async getStatus(handle: ExecutionHandle): Promise<ExecutionStatus> {

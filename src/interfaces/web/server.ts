@@ -511,11 +511,24 @@ export class DashboardWebServer {
       return;
     }
 
+    // POST /api/gemini/models
+    if (req.method === "POST" && pathname === "/api/gemini/models") {
+      const body = await this.readJsonBody(req);
+      const apiKey = String(body.apiKey || "").trim();
+      if (!apiKey) {
+        this.json(res, 400, { error: "API key is required" });
+        return;
+      }
+      const models = await this.discoverGeminiModels(apiKey);
+      this.json(res, 200, { success: true, models });
+      return;
+    }
+
     // POST /api/gemini/test
     if (req.method === "POST" && pathname === "/api/gemini/test") {
       const body = await this.readJsonBody(req);
       const apiKey = String(body.apiKey || "").trim();
-      const model = String(body.model || "gemini-1.5-pro").trim();
+      const model = String(body.model || "gemini-1.5-flash").trim();
 
       if (!apiKey) {
         this.json(res, 400, { error: "API key is required" });
@@ -523,25 +536,54 @@ export class DashboardWebServer {
       }
 
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: "Ping test: respond with 'PONG: Gemini is ready'" }] }],
-          }),
-          signal: AbortSignal.timeout(30000),
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          this.json(res, 400, { success: false, error: `HTTP ${response.status}: ${errText}` });
+        const pingResult = await this.pingGemini(apiKey, model);
+        if (pingResult.success) {
+          this.json(res, 200, {
+            success: true,
+            answer: pingResult.text,
+            activeModel: model,
+          });
           return;
         }
 
-        const data: any = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "OK";
-        this.json(res, 200, { success: true, answer: text.trim() });
+        // If 404 or model not found, query ModelService.ListModels for available models
+        const isNotFound =
+          pingResult.status === 404 ||
+          pingResult.error?.includes("404") ||
+          pingResult.error?.includes("not found") ||
+          pingResult.error?.includes("not supported");
+
+        if (isNotFound) {
+          const discovered = await this.discoverGeminiModels(apiKey);
+          if (discovered.length > 0) {
+            // Find best candidate: prefer model containing "flash", or pick the first available
+            const candidate =
+              discovered.find((m) => m.includes("flash") && !m.includes("vision")) ||
+              discovered[0];
+
+            const candidateResult = await this.pingGemini(apiKey, candidate);
+            if (candidateResult.success) {
+              this.json(res, 200, {
+                success: true,
+                answer: candidateResult.text,
+                activeModel: candidate,
+                availableModels: discovered,
+                autoSwitched: true,
+                note: `Model '${model}' tidak tersedia. WemoteIt otomatis mendeteksi dan mengaktifkan '${candidate}'.`,
+              });
+              return;
+            }
+
+            this.json(res, 400, {
+              success: false,
+              error: `Model '${model}' tidak tersedia untuk API Key ini. Model yang tersedia di akun Google AI Studio Anda: ${discovered.slice(0, 8).join(", ")}`,
+              availableModels: discovered,
+            });
+            return;
+          }
+        }
+
+        this.json(res, 400, { success: false, error: pingResult.error });
       } catch (err: any) {
         this.json(res, 500, { success: false, error: err.message });
       }
@@ -549,6 +591,80 @@ export class DashboardWebServer {
     }
 
     this.json(res, 404, { error: "API route not found" });
+  }
+
+  private async pingGemini(
+    apiKey: string,
+    model: string,
+    timeoutMs = 30000
+  ): Promise<{ success: boolean; status?: number; text?: string; error?: string }> {
+    const apiVersions = ["v1beta", "v1"];
+    let lastError = "";
+    let lastStatus = 400;
+
+    for (const apiVersion of apiVersions) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "Ping test: respond with 'PONG: Gemini is ready'" }] }],
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (response.ok) {
+          const data: any = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "OK";
+          return { success: true, status: 200, text: text.trim() };
+        }
+
+        lastStatus = response.status;
+        lastError = await response.text();
+        if (response.status !== 404) {
+          // If not 404 (e.g. 400 invalid key, 403 forbidden), stop cycling
+          break;
+        }
+      } catch (err: any) {
+        lastError = err.message;
+      }
+    }
+
+    return { success: false, status: lastStatus, error: `HTTP ${lastStatus}: ${lastError}` };
+  }
+
+  private async discoverGeminiModels(apiKey: string, timeoutMs = 15000): Promise<string[]> {
+    const endpoints = [
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`,
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        const resp = await fetch(endpoint, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (resp.ok) {
+          const data: any = await resp.json();
+          if (Array.isArray(data.models)) {
+            return data.models
+              .filter(
+                (m: any) =>
+                  !m.supportedGenerationMethods ||
+                  m.supportedGenerationMethods.includes("generateContent")
+              )
+              .map((m: any) => m.name.replace(/^models\//, ""))
+              .filter((name: string) => typeof name === "string" && name.length > 0);
+          }
+        }
+      } catch {
+        // try next endpoint
+      }
+    }
+    return [];
   }
 
   private json(res: http.ServerResponse, statusCode: number, data: any): void {
