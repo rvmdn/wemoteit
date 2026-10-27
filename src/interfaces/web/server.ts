@@ -556,9 +556,11 @@ export class DashboardWebServer {
         if (isNotFound) {
           const discovered = await this.discoverGeminiModels(apiKey);
           if (discovered.length > 0) {
-            // Find best candidate: prefer model containing "flash", or pick the first available
+            // Prioritize text models over TTS/audio preview models
+            const textModels = discovered.filter((m) => !m.includes("tts") && !m.includes("audio"));
             const candidate =
-              discovered.find((m) => m.includes("flash") && !m.includes("vision")) ||
+              textModels.find((m) => m.includes("flash") && !m.includes("vision")) ||
+              textModels[0] ||
               discovered[0];
 
             const candidateResult = await this.pingGemini(apiKey, candidate);
