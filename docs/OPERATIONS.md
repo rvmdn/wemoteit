@@ -9,148 +9,125 @@
 | **Package Manager** | npm 10+ | `npm 11.12.1` |
 | **Browser Runtime** | Microsoft Edge or Google Chrome installed | `msedge.exe` & `chrome.exe` verified |
 | **Agent Provider** | Antigravity IDE 1.107.0+ | `C:\Users\822117\AppData\Local\Programs\Antigravity IDE` |
+| **Optional Provider** | Google Gemini API Keys (Up to 5 accounts) | Google AI Studio Free/Payg Keys |
 
 ---
 
-## 2. Initial Setup: WhatsApp Web Authentication
+## 2. Web Management Dashboard (Recommended)
 
-WhatsApp Web uses a persistent Chromium profile stored in `./data/whatsapp_session`. A one-time QR code scan is required to link your WhatsApp account.
+The Web Dashboard is the central control center for linking WhatsApp, managing Gemini pool accounts, and monitoring jobs.
 
-### Step 1: Launch Authentication Helper
-Run the following command in PowerShell:
+### Starting the Dashboard
 ```powershell
-npm run cli -- login-whatsapp
+npm run dashboard
 ```
-This opens Microsoft Edge in visible (*headful*) mode navigating to `https://web.whatsapp.com`.
+Open **`http://localhost:3100`** in your browser.
 
-### Step 2: Scan QR Code
-1. Open WhatsApp on your mobile phone.
-2. Go to **Settings > Linked Devices > Link a Device**.
-3. Scan the QR code displayed on your PC screen.
-4. Once the chat list loads on your screen, press `Ctrl+C` in your terminal to save and close the session.
-
-Your authenticated credentials are now preserved inside `./data/whatsapp_session`. Future launches will operate headless without requesting QR codes.
+### Key Capabilities in Dashboard
+1. **WhatsApp Web Pairing**:
+   - Displays real-time connection status (`disconnected`, `launching`, `needs_qr_login`, `authenticated`, `listening`).
+   - Dynamically renders the WhatsApp Web QR Code canvas for scanning.
+   - Pilihan browser: Microsoft Edge (default) atau Google Chrome, dengan mode Headless atau Headful.
+2. **Authorized Account Lock**:
+   - Enter your WhatsApp number / JID (e.g. `628123456789@c.us` or `self`).
+   - Click **"Lock Account"** to immediately persist and enforce sender allowlist restrictions.
+3. **AI Account Pool Manager**:
+   - Manage up to 5 Google Gemini accounts.
+   - Live status badges: `Active`, `Cooldown (60s)`, `Exhausted`, `Disabled`.
+   - Built-in **Ping Test Console** to verify API keys with 10-second timeout.
+   - All secret keys are automatically masked.
+4. **Live Job Monitor & 1-Click Approvals**:
+   - Real-time job queue and historical execution results.
+   - 1-click **Approve** or **Reject** buttons for pending mutating actions.
 
 ---
 
-## 3. Starting the Orchestrator
+## 3. Alternative CLI Operations
 
-### Production Mode (Headless)
+### Headless Orchestrator Daemon
 ```powershell
 npm run cli -- start-whatsapp
 ```
-The orchestrator starts in the background, connects to the saved WhatsApp Web session, initializes SQLite tables, recovers any stalled jobs, and begins listening for incoming messages from your configured authorized self-chat.
+Runs the WhatsApp listener daemon in headless mode using saved session credentials in `./data/whatsapp_session`.
 
-### Debug Mode (Headful with DevTools)
-To observe browser interactions visually while debugging:
+### Diagnostic & Status Check
 ```powershell
-npm run cli -- start-whatsapp --headful
+npm run cli -- status
 ```
 
----
-
-## 4. Configuration Reference
-
-All settings are stored in human-readable, versioned YAML files inside the `config/` directory:
-
-- **`config/defaults.yaml`**: Primary workspace identity and policy defaults.
-- **`config/channels.yaml`**:
-  ```yaml
-  channels:
-    whatsapp:
-      enabled: true
-      authorizedSenderId: "self"          # Or user JID / phone number
-      authorizedConversationId: "self"    # Or self-chat ID
-      headless: true
-      sessionDataDir: "./data/whatsapp_session"
-  ```
-- **`config/agents.yaml`**:
-  ```yaml
-  agents:
-    antigravity:
-      enabled: true
-      executionMode: "cli"
-      cliPath: "C:\\Users\\822117\\AppData\\Local\\Programs\\Antigravity IDE\\bin\\antigravity-ide.cmd"
-      maxTimeoutMs: 120000
-  ```
-- **`config/repositories.yaml`**:
-  Explicit allowlist of repositories that may be operated on. Arbitrary directory traversal is denied.
-
----
-
-## 5. Command Reference (Mobile WhatsApp Chat)
-
-Send these commands from your phone to your own self-chat:
-
-| Command | Description | Approval Required? |
-|---|---|---|
-| `/help` | Displays available commands and syntax. | No |
-| `/status` | Shows real-time system health, active jobs, and queued items. | No |
-| `/repos` | Lists all authorized repositories and their canonical paths. | No |
-| `/jobs` | Lists the 5 most recent jobs and their statuses. | No |
-| `/job <jobId>` | Detailed inspection of a specific job (timeline, results, errors). | No |
-| `/review <repo> [prompt]` | Read-only codebase review on the target repo. | No (Auto-allowed) |
-| `/run <repo> <prompt>` | Request a mutating agent task (e.g., refactoring). | **YES** (Generates token `APP-XXXX`) |
-| `/approve <token>` | Approves and immediately starts a pending mutating task. | No (Grants execution) |
-| `/cancel <jobId>` | Gracefully requests cancellation of a running or queued job. | No |
-
----
-
-## 6. Troubleshooting Runbook
-
-### Issue A: WhatsApp Web Disconnected or Asks for QR Code Again
-- **Symptoms**: CLI reports `needs_qr_login` or health check reports `degraded`.
-- **Cause**: WhatsApp Web session expired on the phone, or browser cookies were cleared.
-- **Resolution**:
-  1. Stop the running orchestrator (`Ctrl+C`).
-  2. Re-run `npm run cli -- login-whatsapp`.
-  3. Scan the QR code again from your phone.
-  4. Restart `npm run cli -- start-whatsapp`.
-
-### Issue B: Antigravity IDE Agent Times Out
-- **Symptoms**: Job fails with error code `EXECUTION_TIMEOUT`.
-- **Resolution**:
-  1. Check if Antigravity IDE is open on your machine.
-  2. Inspect `config/agents.yaml` and increase `maxTimeoutMs` (e.g. from 120,000 to 300,000 for large tasks).
-  3. Run `npm run cli -- trace <correlationId>` to inspect exact failure duration.
-
-### Issue C: SQLite Database Locked
-- **Symptoms**: Error message `SQLITE_BUSY: database is locked`.
-- **Resolution**:
-  1. The database operates in WAL mode (`journal_mode = WAL`). Ensure no zombie Node processes are holding the file:
-     ```powershell
-     Get-Process node | Stop-Process -Force
-     ```
-  2. Restart the orchestrator; WAL checkpoint recovery runs automatically.
-
----
-
-## 7. Backup & Disaster Recovery
-
-### Database Backup
-The primary database file is `./data/wemoteit.db`. To take a hot backup without stopping the service:
+### Hermetic Pipeline Simulation
 ```powershell
-# Copy DB safely using sqlite backup or file copy when idle:
-Copy-Item "./data/wemoteit.db" "./data/wemoteit.db.backup"
-```
-
-### Crash Recovery Guarantee
-If the host PC loses power or crashes during task execution:
-1. Upon restart, `JobManager.recoverStalledJobs()` detects any job left in `running` state.
-2. Interrupted jobs transition safely to `failed` with code `UNEXPECTED_SYSTEM_RESTART`.
-3. Destructive operations are **never** blindly replayed without operator approval.
-
----
-
-## 8. Build, Test, and Release
-
-```powershell
-# Compile TypeScript to dist/
-npm run build
-
-# Run complete automated test suite (Unit, Integration, Security)
-npm test
-
-# Run hermetic end-to-end pipeline test
 npm run cli -- test-pipeline
 ```
+Runs an offline simulation from message normalization to job completion without opening WhatsApp or Antigravity.
+
+---
+
+## 4. Mobile Chat Interaction Guide
+
+Send messages directly to yourself in WhatsApp ("Message yourself" chat):
+
+### Fast-Path Slash Commands
+| Command | Description | Tier / Approval |
+|---|---|---|
+| `/help` | Displays available commands and syntax. | Tier 1 (Safe) |
+| `/status` | Shows real-time system health, active jobs, and queued tasks. | Tier 1 (Safe) |
+| `/repos` | Lists all authorized local repositories and canonical paths. | Tier 1 (Safe) |
+| `/jobs` | Lists the most recent jobs and execution statuses. | Tier 1 (Safe) |
+| `/job <jobId>` | Detailed inspection of a specific job (timeline, results). | Tier 1 (Safe) |
+| `/review <repo> [prompt]` | Read-only codebase review (Antigravity or Gemini). | Tier 1 (Safe) |
+| `/run <repo> <prompt>` | Request mutating agent task (modifies code/files). | **Tier 2 (Requires Confirmation)** |
+| `/approve <token>` | Legacy slash command approval for `APP-XXXX`. | Tier 2 Approval |
+| `/cancel <jobId>` | Requests cancellation of a queued or running job. | Tier 1 (Safe) |
+
+### Conversational & Windows OS Automation Examples
+You can speak naturally in Indonesian or English:
+
+- **Reviewing Code**:
+  - *"Tolong review repositori wedocit"*
+  - *"Cek kode di scanwitme apa yang bisa ditingkatkan"*
+- **Hardware Telemetry**:
+  - *"Baterai laptop tinggal berapa?"*
+  - *"Cek status RAM dan CPU sekarang"*
+  - *"Berapa sisa kapasitas harddisk C dan D?"*
+- **Desktop Screenshots**:
+  - *"Screenshot layar sekarang"* (Bot will capture and upload image directly to WhatsApp chat)
+- **App Control**:
+  - *"Buka Microsoft Teams"*
+  - *"Tutup notepad"* (Tier 2: Prompting for confirmation)
+- **Power Management**:
+  - *"Kunci layar laptop"* (Tier 1: Locks workstation immediately)
+  - *"Jangan biarkan laptop tidur"* (Tier 1: Enables stay-awake anti-sleep)
+  - *"Tidurkan laptop jam 23:00"* (Tier 2: Schedules sleep via Task Scheduler)
+  - *"Batalkan jadwal sleep"* (Tier 1: Cancels scheduled sleep task)
+
+### Quick Confirmation Workflow
+When a Tier 2 action is requested, the bot replies:
+> *"⚠️ Konfirmasi Tindakan Sistem (Tier 2)*
+> *Anda akan menutup aplikasi notepad. Balas **YA** dalam 2 menit untuk melanjutkan, atau **BATAL** untuk membatalkan."*
+
+- **To confirm**: Reply with `YA`, `YES`, `OKE`, `SETUJU`, `LANJUT`, `SIAP`, `YA SILAKAN`.
+- **To cancel**: Reply with `BATAL`, `CANCEL`, `TIDAK`, `NO`, `GAK JADI`.
+
+---
+
+## 5. Troubleshooting Runbook
+
+### Issue: WhatsApp Disconnected or Session Expired
+- **Symptom**: Dashboard shows `disconnected` or daemon logs authentication timeout.
+- **Remedy**:
+  1. Open Dashboard at `http://localhost:3100`.
+  2. Click **"Relink WhatsApp"** or run `npm run cli -- login-whatsapp`.
+  3. Scan the fresh QR code using your phone.
+
+### Issue: Gemini Account Hits HTTP 429 (Rate Limit)
+- **Symptom**: Log shows `RESOURCE_EXHAUSTED` for an API key.
+- **Remedy**: WemoteIt automatically puts that key into a 60-second cooldown and rotates to the next available account in the pool. No manual action is needed. You can add more backup keys in the Dashboard tab "AI Account Pool".
+
+### Issue: Desktop Screenshot Capture Fails
+- **Symptom**: Log reports screen resolution error.
+- **Remedy**: Ensure the Windows user session is active (not locked by another Remote Desktop session). `wemoteit` automatically prunes screenshots in `./data/screenshots` to prevent disk bloat.
+
+### Issue: Agent Process Times Out
+- **Symptom**: Job status transitions to `timeout`.
+- **Remedy**: WemoteIt terminates the entire Windows process tree via `taskkill /pid <pid> /T /F`. Check `maxTimeoutMs` in `config/agents.yaml` if tasks require more execution time.
