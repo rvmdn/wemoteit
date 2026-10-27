@@ -192,7 +192,7 @@ export class GeminiExecutionProvider implements ExecutionProvider {
     repoContext: string,
     signal: AbortSignal
   ): Promise<string> {
-    const model = account.model || this.config.defaultModel || "gemini-3.8-flash";
+    const model = account.model || this.config.defaultModel || "gemini-1.5-flash";
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${account.apiKey}`;
 
     const systemInstruction =

@@ -530,7 +530,7 @@ export class DashboardWebServer {
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: "Ping test: respond with 'PONG: Gemini is ready'" }] }],
           }),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(30000),
         });
 
         if (!response.ok) {

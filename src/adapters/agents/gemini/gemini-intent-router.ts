@@ -44,7 +44,7 @@ export type ResolvedIntent =
 export class GeminiIntentRouter {
   constructor(
     private readonly poolManager: GeminiAccountPoolManager,
-    private readonly defaultModel: string = "gemini-3.8-flash"
+    private readonly defaultModel: string = "gemini-1.5-flash"
   ) {}
 
   /**
