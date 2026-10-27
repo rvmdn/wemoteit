@@ -148,3 +148,34 @@ repositories:
       - master
       - develop
     enabled: true
+
+  - id: ams-be
+    name: AMS Fast Web API (Backend)
+    description: AMS Fast .NET Core Web API backend service
+    path: D:/Users/irvan ramadan/ams-fast-web-api
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
+  - id: ams-fe
+    name: AMS Fast Frontend (Angular)
+    description: AMS Fast Angular frontend web application
+    path: D:/Users/irvan ramadan/ams-fast-iad
+    allowedOperations:
+      - read
+      - review
+      - modify
+      - test
+    allowedBranches:
+      - main
+      - master
+      - develop
+    enabled: true
+
